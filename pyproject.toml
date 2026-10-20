@@ -1,0 +1,89 @@
+[project]
+name = "app"
+version = "0.1.0"
+description = "Databricks App quick-start: FastAPI + React on Lakebase Postgres"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.16",
+    "databricks-sdk>=0.81",
+    "fastapi>=0.140",
+    "httpx2>=2.12",
+    "mlflow-tracing>=3.10",
+    "openai>=3.0",
+    "openai-agents>=0.23",
+    "psycopg[binary]>=3.2",
+    "pydantic-settings>=2.10",
+    "sqlalchemy>=2.0.40",
+    "uvicorn[standard]>=0.50",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "mypy>=1.18",
+    "pgserver>=0.1.4",
+    "pytest>=9.0",
+    "ruff>=0.14",
+    { include-group = "eval" },
+]
+eval = [
+    "mlflow[databricks]>=3.10",
+]
+
+[tool.uv]
+# The app is not installed as a package: Databricks Apps runs it from source with PYTHONPATH=backend.
+package = false
+# Databricks Apps installs the default groups at deploy time; keep that to runtime dependencies only.
+# Local tooling uses `uv sync --all-groups` (see Makefile).
+default-groups = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["backend", "."]
+extend-exclude = ["backend/app/static"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "N", "ASYNC", "PT", "S", "T20"]
+ignore = [
+    "E501", # the formatter enforces line length for code; long comments and docstrings are fine
+    "S101", # assert is fine in tests and type narrowing
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106"]
+"scripts/**" = ["T20", "S603", "S607"]
+"evals/**" = ["T20"]
+"backend/app/migrations/**" = ["N999"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "evals"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "backend"
+files = ["backend/app", "tests", "evals", "scripts"]
+explicit_package_bases = true
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# pgserver re-exports its API without __all__.
+module = ["pgserver", "pgserver.*"]
+implicit_reexport = true
+
+[[tool.mypy.overrides]]
+# MLflow's scorer constructors are not annotated.
+module = ["evals.*"]
+disallow_untyped_calls = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["backend", "."]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+filterwarnings = [
+    "error::DeprecationWarning:app.*",
+    "ignore::DeprecationWarning:mlflow.*",  # MLflow internals on SQLAlchemy 2.1
+]

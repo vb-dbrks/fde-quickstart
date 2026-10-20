@@ -1,0 +1,56 @@
+# Deploy the bundle. Pushes to main deploy dev; test and prod are deployed by running this workflow
+# by hand (Actions > Deploy > Run workflow). Every deploy runs CI first.
+#
+# Sign-in uses workload identity federation: GitHub's OIDC token is exchanged for a Databricks token
+# for a service principal, so no Databricks secret is stored in GitHub. Per GitHub environment
+# (dev, test, prod), set the variables DATABRICKS_HOST and DATABRICKS_CLIENT_ID (the service
+# principal's application ID). Deploys stay off until the repository variable DEPLOY_ENABLED is
+# "true", so a new repository doesn't fail on its first push. Setup steps: README, "CI/CD".
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Bundle target to deploy
+        type: choice
+        options: [dev, test, prod]
+        default: test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.target || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy ${{ inputs.target || 'dev' }}
+    needs: ci
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    # Add required reviewers to the prod environment in the repository settings.
+    environment: ${{ inputs.target || 'dev' }}
+    permissions:
+      contents: read
+      id-token: write # lets the job request GitHub's OIDC token
+    env:
+      DATABRICKS_AUTH_TYPE: github-oidc
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - uses: databricks/setup-cli@9b64c94a6d2b2e830592d80e9f14c26d32b42ad7 # v1.20.0
+      - run: make ci-deploy TARGET=${{ inputs.target || 'dev' }}

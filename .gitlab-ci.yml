@@ -1,0 +1,113 @@
+# GitLab CI/CD: lint and test merge requests and the default branch; deploy dev from the default branch,
+# and test and prod with manual jobs.
+#
+# Deploys sign in with workload identity federation: the job's GitLab ID token is exchanged for a
+# Databricks token for a service principal, so no Databricks secret is stored in GitLab. Set the CI/CD
+# variable DATABRICKS_ACCOUNT_ID, and per environment (dev, test, prod) DATABRICKS_HOST and
+# DATABRICKS_CLIENT_ID (the service principal's application ID). Deploy jobs only appear once the
+# variable DEPLOY_ENABLED is "true", so a new project doesn't fail on its first push.
+# Setup steps: README, "CI/CD".
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+stages: [check, deploy]
+
+variables:
+  DATABRICKS_CLI_VERSION: "1.20.0"
+  NODE_IMAGE: node:24
+
+.uv:
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  variables:
+    UV_CACHE_DIR: .uv-cache
+    UV_LINK_MODE: copy
+  cache:
+    key:
+      files: [uv.lock]
+    paths: [.uv-cache]
+
+.npm:
+  image: $NODE_IMAGE
+  cache:
+    key:
+      files: [frontend/package-lock.json]
+    paths: [.npm]
+  before_script:
+    - npm ci --prefix frontend --cache .npm --prefer-offline
+
+python:
+  stage: check
+  extends: .uv
+  script:
+    - uv sync --locked --all-groups
+    - uv run --frozen ruff check .
+    - uv run --frozen ruff format --check .
+    - uv run --frozen mypy
+    - uv run --frozen pytest # real Postgres via pgserver, no Docker service needed
+
+frontend:
+  stage: check
+  extends: .npm
+  script:
+    - cd frontend
+    - npm run lint
+    - npm run typecheck
+    - npm test
+    - npm run build
+
+contracts:
+  stage: check
+  extends: .npm
+  script:
+    - scripts/check_lockfiles.sh
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - make api-types
+    - git diff --exit-code -- frontend/src/api/schema.d.ts
+      || { echo "frontend/src/api/schema.d.ts is stale. Run 'make api-types' and commit."; exit 1; }
+
+.deploy:
+  stage: deploy
+  extends: .npm
+  id_tokens:
+    DATABRICKS_OIDC_TOKEN:
+      aud: $DATABRICKS_ACCOUNT_ID
+  variables:
+    DATABRICKS_AUTH_TYPE: env-oidc
+  resource_group: deploy-$TARGET
+  script:
+    - command -v unzip || { apt-get update -qq && apt-get install -y -qq unzip; }
+    - curl -fsSL "https://raw.githubusercontent.com/databricks/setup-cli/v${DATABRICKS_CLI_VERSION}/install.sh" | sh
+    - make ci-deploy TARGET=$TARGET
+
+deploy-dev:
+  extends: .deploy
+  environment: dev
+  variables:
+    TARGET: dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_ENABLED == "true"
+
+deploy-test:
+  extends: .deploy
+  environment: test
+  variables:
+    TARGET: test
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_ENABLED == "true"
+      when: manual
+
+deploy-prod:
+  extends: .deploy
+  environment: prod
+  needs: [deploy-test]
+  variables:
+    TARGET: prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_ENABLED == "true"
+      when: manual

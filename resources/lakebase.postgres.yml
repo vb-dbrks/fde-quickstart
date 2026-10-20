@@ -1,0 +1,26 @@
+# Lakebase Postgres for the app's state: one project per target. Creating a project also creates its
+# `production` branch and a read-write compute that scales to zero when idle.
+#
+# The app's service principal gets CAN_CONNECT_AND_CREATE on the database and creates (and owns) the
+# `app` schema on first start, so deploy before pointing a local `make dev` at it.
+resources:
+  postgres_projects:
+    app_project:
+      project_id: "{{project_name}}-${bundle.target}"
+      display_name: "{{project_title}} (${bundle.target})"
+      pg_version: 17
+
+  # Lakebase needs an owner role for the database. Declaring it keeps the bundle independent of who
+  # deploys it.
+  postgres_roles:
+    app_db_owner:
+      parent: ${resources.postgres_projects.app_project.id}/branches/production
+      role_id: app-owner
+      postgres_role: app_owner
+
+  postgres_databases:
+    app_db:
+      parent: ${resources.postgres_projects.app_project.id}/branches/production
+      database_id: app
+      postgres_database: app
+      role: ${resources.postgres_roles.app_db_owner.id}

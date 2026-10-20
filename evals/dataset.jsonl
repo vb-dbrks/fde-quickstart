@@ -1,0 +1,5 @@
+{"inputs": {"message": "When is the kick-off meeting?"}, "expectations": {"expected_facts": ["The kick-off is on Monday at 10:00"]}}
+{"inputs": {"message": "What did we decide to use for the app's state?"}, "expectations": {"expected_facts": ["The team decided to keep the app's state in Lakebase Postgres"]}}
+{"inputs": {"message": "Who is sharing the demo dataset, and by when?"}, "expectations": {"expected_facts": ["Alex shares the demo dataset", "The deadline is Friday"]}}
+{"inputs": {"message": "Who am I, and what am I allowed to do here?"}, "expectations": {"expected_facts": ["The user is eval.user@example.com", "The user has the editor role"]}}
+{"inputs": {"message": "What did we decide about the budget?"}, "expectations": {"expected_facts": ["There is no note about a budget decision"]}}

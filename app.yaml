@@ -1,0 +1,16 @@
+# Databricks Apps runtime configuration. Dependencies install from pyproject.toml + uv.lock (there is
+# deliberately no requirements.txt). `valueFrom` refers to resources declared in resources/app.app.yml;
+# Lakebase connection details (PGHOST, PGDATABASE, PGUSER, ...) are injected automatically.
+command: ["uv", "run", "--frozen", "python", "-m", "app"]
+
+env:
+  - name: PYTHONPATH
+    value: backend
+  - name: APP_TITLE
+    value: "{{project_title}}"
+  - name: APP_ADMIN_EMAILS
+    value: "{{admin_emails}}"
+  - name: LLM_ENDPOINT
+    valueFrom: llm-endpoint
+  - name: MLFLOW_EXPERIMENT_ID
+    valueFrom: experiment

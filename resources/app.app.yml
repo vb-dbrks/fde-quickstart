@@ -1,0 +1,37 @@
+# The Databricks App. Its start command and environment are in app.yaml at the repo root; the
+# `valueFrom` keys there refer to the resource names below.
+resources:
+  apps:
+    app:
+      name: "{{project_name}}"
+      description: "{{project_title}}"
+      source_code_path: ..
+      resources:
+        - name: database
+          description: Lakebase database for the app's state
+          postgres:
+            branch: ${resources.postgres_projects.app_project.id}/branches/production
+            database: ${resources.postgres_databases.app_db.id}
+            permission: CAN_CONNECT_AND_CREATE
+        - name: llm-endpoint
+          description: Model Serving endpoint the agents call
+          serving_endpoint:
+            name: ${var.llm_endpoint}
+            permission: CAN_QUERY
+        - name: experiment
+          description: MLflow experiment that receives agent traces
+          experiment:
+            experiment_id: ${resources.experiments.agent_traces.id}
+            permission: CAN_EDIT
+        # Secrets, e.g. a webhook URL for notifications (then add NOTIFICATION_WEBHOOK_URL with
+        # `valueFrom: notification-webhook` in app.yaml):
+        # - name: notification-webhook
+        #   secret:
+        #     scope: <secret-scope>
+        #     key: <secret-key>
+        #     permission: READ
+      permissions:
+        - group_name: ${var.app_users_group}
+          level: CAN_USE
+      lifecycle:
+        started: true

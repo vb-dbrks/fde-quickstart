@@ -1,0 +1,62 @@
+# Declarative Automation Bundle: the app, its Lakebase database and an MLflow experiment per target.
+#
+#   make deploy TARGET=dev PROFILE=<cli-profile>
+#
+# The CLI profile is always passed explicitly. Each target pins its workspace host, so deploying a
+# target with a profile for a different workspace fails instead of landing in the wrong place.
+# Test and prod deploy into the deploying identity's folder - in CI, the pipeline's service principal.
+#
+# The dev target is shared: development mode does not make the app or Lakebase project names
+# per-user, so one person (or CI) deploys dev per workspace.
+bundle:
+  name: "{{project_name}}"
+
+include:
+  - resources/*.yml
+
+variables:
+  llm_endpoint:
+    description: Model Serving endpoint the agents call, e.g. a Foundation Model API endpoint.
+    default: "{{llm_endpoint}}"
+  app_users_group:
+    description: Workspace group allowed to open the app.
+    default: users
+
+# The app's source is the bundle root (resources/app.app.yml). Leave out what the app doesn't run.
+# Only list paths that always exist: patterns that match nothing are warnings, and `--strict` fails.
+sync:
+  exclude:
+    - frontend/**
+    - tests/**
+    - evals/**
+    - scripts/**
+  include:
+    # Built by `make build`. Ignored by git, so it has to be included explicitly.
+    - backend/app/static/**
+
+targets:
+  dev:
+    mode: development
+    workspace:
+      host: "{{dev_host}}"
+
+  test:
+    mode: production
+    workspace:
+      host: "{{test_host}}"
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    resources:
+      apps:
+        app:
+          name: "{{project_name}}-test"
+
+  prod:
+    mode: production
+    workspace:
+      host: "{{prod_host}}"
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    resources:
+      postgres_projects:
+        app_project:
+          lifecycle:
+            prevent_destroy: true

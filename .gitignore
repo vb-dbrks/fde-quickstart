@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+
+# Build output (the frontend builds into the backend; `make build`)
+backend/app/static/
+.build/
+
+# Databricks bundle state
+.databricks/
+
+# Local settings and data
+.env
+.local/
+.DS_Store

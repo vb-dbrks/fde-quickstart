@@ -1,0 +1,10 @@
+import { Toaster as Sonner, type ToasterProps } from "sonner";
+
+import { useTheme } from "@/lib/theme";
+
+function Toaster(props: ToasterProps) {
+  const [theme] = useTheme();
+  return <Sonner theme={theme} className="toaster group" closeButton richColors {...props} />;
+}
+
+export { Toaster };

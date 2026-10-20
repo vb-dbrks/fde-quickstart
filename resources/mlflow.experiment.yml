@@ -1,0 +1,5 @@
+# Agent traces from the running app land here (app.agents.registry.configure_tracing).
+resources:
+  experiments:
+    agent_traces:
+      name: "/Users/${workspace.current_user.userName}/{{project_name}}-${bundle.target}-agent-traces"
