@@ -108,8 +108,13 @@ def main(argv: list[str] | None = None) -> None:
                 RelevanceToQuery(),
                 Safety(),
                 Guidelines(
-                    name="plain_language",
-                    guidelines="The response is in plain language and at most five sentences.",
+                    # The app shows replies as plain text, so Markdown would appear literally.
+                    # Length is checked by the deterministic `concise` scorer: judges miscount.
+                    name="plain_text",
+                    guidelines=(
+                        "The response contains no Markdown formatting: no asterisks for bold or"
+                        " italics, no bullet points or numbered lists, and no headings."
+                    ),
                 ),
                 concise,
             ],

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.agents import tools
 from app.agents.assistant import AssistantAgent, load_prompt
 from app.agents.base import AgentContext, AgentNotConfiguredError, AgentReply
-from app.agents.llm import databricks_openai_client
+from app.agents.llm import databricks_openai_client, flatten_message_content
 from app.agents.registry import AgentRegistry, build_registry
 from app.config import Settings
 from app.deps import get_agent_registry
@@ -29,8 +29,14 @@ class EchoAgent:
         return AgentReply(output=f"{context.principal.email}: {message}")
 
 
-def completion(*, content: str | None = None, tool_call: str | None = None) -> dict[str, Any]:
-    """A minimal OpenAI chat-completions response, as Databricks Model Serving returns it."""
+REASONING_PART = {
+    "type": "reasoning",
+    "summary": [{"type": "summary_text", "text": "", "signature": "x"}],
+}
+
+
+def completion(*, content: Any = None, tool_call: str | None = None) -> dict[str, Any]:
+    """A minimal chat-completions response, as Databricks Model Serving returns it."""
     message: dict[str, Any] = {"role": "assistant", "content": content}
     if tool_call:
         message["tool_calls"] = [
@@ -125,15 +131,23 @@ class StaticConfig:
 def test_the_assistant_calls_tools_through_the_model_endpoint(
     sessions: sessionmaker[Session],
 ) -> None:
-    """The real Agents SDK loop against a fake Model Serving endpoint: a tool call, then an answer."""
+    """The real Agents SDK loop against a fake Model Serving endpoint: a tool call, then an answer.
+
+    Both responses use list-valued content with a reasoning part, as Claude on Databricks can.
+    """
     calls: list[httpx2.Request] = []
 
     def endpoint(request: httpx2.Request) -> httpx2.Response:
         calls.append(request)
         messages = json.loads(request.content)["messages"]
         if any(message["role"] == "tool" for message in messages):
-            return httpx2.Response(200, json=completion(content="You are editor@example.com."))
-        return httpx2.Response(200, json=completion(tool_call="whoami"))
+            answer = [
+                REASONING_PART,
+                {"type": "text", "text": "You are "},
+                {"type": "text", "text": "editor@example.com."},
+            ]
+            return httpx2.Response(200, json=completion(content=answer))
+        return httpx2.Response(200, json=completion(content=[REASONING_PART], tool_call="whoami"))
 
     config = cast(Config, StaticConfig())
     agent = AssistantAgent(
@@ -158,3 +172,13 @@ def test_the_assistant_calls_tools_through_the_model_endpoint(
     }
     tool_result = next(m for m in json.loads(calls[1].content)["messages"] if m["role"] == "tool")
     assert json.loads(tool_result["content"])["email"] == EDITOR
+
+
+def test_list_content_is_flattened_to_its_text() -> None:
+    reasoning_only = completion(content=[REASONING_PART], tool_call="whoami")
+    assert flatten_message_content(reasoning_only)
+    assert reasoning_only["choices"][0]["message"]["content"] is None
+
+    plain = completion(content="Already a string.")
+    assert not flatten_message_content(plain)
+    assert plain["choices"][0]["message"]["content"] == "Already a string."

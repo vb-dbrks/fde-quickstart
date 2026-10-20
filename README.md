@@ -137,7 +137,9 @@ polls every 30 seconds: the Apps proxy buffers server-sent events and ends reque
 
 **Agents.** `backend/app/agents/` holds the agents served at `/api/agents/{name}/invoke`. The example
 assistant uses the OpenAI Agents SDK with a Databricks Model Serving endpoint; its tools run as the
-calling user and check the same permissions as the API. Traces go to the target's MLflow experiment.
+calling user and check the same permissions as the API. `agents/llm.py` adapts Databricks responses the
+SDK can't read (reasoning models can return message content as a list of parts), so keep it when
+switching models. Traces go to the target's MLflow experiment.
 Replies must arrive within the proxy's 120-second limit. Add an agent by copying `assistant.py`, adding
 a prompt in `prompts/` and registering it in `registry.py`. Keep the package inside `app`: a top-level
 `agents` package would shadow the SDK, which is also imported as `agents`.
