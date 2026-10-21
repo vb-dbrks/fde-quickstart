@@ -12,7 +12,7 @@ describe("app shell", () => {
 
     expect(await screen.findByRole("heading", { name: "Welcome, Vera Viewer" })).toBeVisible();
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getByRole("link", { name: "Notes" })).toBeVisible();
+    expect(within(nav).getByRole("link", { name: "Documents" })).toBeVisible();
     expect(within(nav).queryByRole("link", { name: "Users & roles" })).not.toBeInTheDocument();
   });
 

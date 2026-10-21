@@ -11,35 +11,39 @@ export const viewer: Me = {
   email: "viewer@example.com",
   display_name: "Vera Viewer",
   roles: ["viewer"],
-  permissions: ["notes:read"],
+  permissions: [],
 };
 
 export const editor: Me = {
   email: "editor@example.com",
   display_name: "Ed Editor",
   roles: ["editor", "viewer"],
-  permissions: ["agents:invoke", "notes:read", "notes:write"],
+  permissions: ["agents:run", "documents:create"],
 };
 
 export const admin: Me = {
   email: "admin@example.com",
   display_name: "Ada Admin",
   roles: ["admin", "viewer"],
-  permissions: ["agents:invoke", "notes:delete_any", "notes:read", "notes:write", "roles:manage"],
+  permissions: ["agents:run", "documents:access_any", "documents:create", "roles:manage"],
 };
 
 export const noNotifications: NotificationList = { items: [], unread_count: 0 };
 
+type Handler = unknown | ((request: Request) => unknown);
+
 /**
- * Stub fetch. Keys are "METHOD /path" (or just "/path" for GET); values are JSON bodies or Response
- * objects. Unknown paths get a 404.
+ * Stub fetch. Keys are "METHOD /path" (or just "/path" for GET); values are JSON bodies, Response
+ * objects, or functions of the request returning either (for responses that change over time).
+ * Unknown paths get a 404.
  */
-export function mockApi(routes: Record<string, unknown>) {
+export function mockApi(routes: Record<string, Handler>) {
   const fetchMock = vi.fn(async (request: Request) => {
     const { pathname } = new URL(request.url);
-    const handler =
+    const route =
       routes[`${request.method} ${pathname}`] ??
       (request.method === "GET" ? routes[pathname] : undefined);
+    const handler = typeof route === "function" ? await route(request) : route;
     if (handler === undefined) return Response.json({ detail: "Not Found" }, { status: 404 });
     return handler instanceof Response ? handler.clone() : Response.json(handler);
   });

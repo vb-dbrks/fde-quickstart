@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health */
+        /**
+         * Health
+         * @description Database reachability, plus which agent runner serves each run kind.
+         */
         get: operations["health_api_health_get"];
         put?: never;
         post?: never;
@@ -30,7 +33,7 @@ export interface paths {
         };
         /**
          * Me
-         * @description The signed-in user and what they may do. The UI uses this to show or hide actions.
+         * @description The signed-in user and their app-wide permissions. The UI uses this to show or hide actions.
          */
         get: operations["me_api_me_get"];
         put?: never;
@@ -41,25 +44,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/notes": {
+    "/api/document-types": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Notes */
-        get: operations["list_notes_api_notes_get"];
+        /**
+         * List Document Types
+         * @description The field catalog: document types and their fields.
+         */
+        get: operations["list_document_types_api_document_types_get"];
         put?: never;
-        /** Create Note */
-        post: operations["create_note_api_notes_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/notes/{note_id}": {
+    "/api/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Documents */
+        get: operations["list_documents_api_documents_get"];
+        put?: never;
+        /** Create Document */
+        post: operations["create_document_api_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document */
+        get: operations["get_document_api_documents__document_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Document */
+        delete: operations["delete_document_api_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/fields/{field_path}": {
         parameters: {
             query?: never;
             header?: never;
@@ -69,8 +110,163 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Note */
-        delete: operations["delete_note_api_notes__note_id__delete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Field
+         * @description Edit a field, or accept an enhance_field suggestion (``accepted_from_run_id``).
+         */
+        patch: operations["update_field_api_documents__document_id__fields__field_path__patch"];
+        trace?: never;
+    };
+    "/api/documents/{document_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Versions */
+        get: operations["list_versions_api_documents__document_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Audit */
+        get: operations["list_audit_api_documents__document_id__audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Access */
+        get: operations["list_access_api_documents__document_id__access_get"];
+        /**
+         * Share Document
+         * @description Give someone view, edit or owner access (owners only).
+         */
+        put: operations["share_document_api_documents__document_id__access_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/access/{email}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unshare Document */
+        delete: operations["unshare_document_api_documents__document_id__access__email__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/agent-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["list_runs_api_documents__document_id__agent_runs_get"];
+        put?: never;
+        /**
+         * Start Run
+         * @description Start an agent run. Poll ``GET /api/agent-runs/{id}`` until it succeeds or fails.
+         */
+        post: operations["start_run_api_documents__document_id__agent_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Run
+         * @description Latest state of a run. While it is in progress this refreshes it from the agent (lazy
+         *     refresh); when it first succeeds the output is materialised in the same transaction.
+         */
+        get: operations["get_run_api_agent_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Threads
+         * @description Your conversations about this document (they are private to you).
+         */
+        get: operations["list_threads_api_documents__document_id__threads_get"];
+        put?: never;
+        /** Create Thread */
+        post: operations["create_thread_api_documents__document_id__threads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/threads/{thread_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Messages */
+        get: operations["list_messages_api_threads__thread_id__messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -182,67 +378,243 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Agents */
-        get: operations["list_agents_api_agents_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/agents/{name}/invoke": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Invoke Agent
-         * @description Run an agent to completion. Replies must arrive within the Apps proxy's 120 s limit.
-         */
-        post: operations["invoke_agent_api_agents__name__invoke_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AgentInfo */
-        AgentInfo: {
+        /**
+         * Access
+         * @description Per-document access, from least to most.
+         * @enum {string}
+         */
+        Access: "view" | "edit" | "owner";
+        /** AccessGrant */
+        AccessGrant: {
+            /** Email */
+            email: string;
+            access: components["schemas"]["Access"];
+        };
+        /** AccessOut */
+        AccessOut: {
+            /** Principal */
+            principal: string;
+            access: components["schemas"]["Access"];
+            /** Granted By */
+            granted_by: string;
+            /**
+             * Granted At
+             * Format: date-time
+             */
+            granted_at: string;
+        };
+        /** AgentRunCreate */
+        AgentRunCreate: {
+            /**
+             * Run Kind
+             * @enum {string}
+             */
+            run_kind: "generate" | "enhance_field" | "assistant_turn";
+            /** Instruction */
+            instruction?: string | null;
+            /** Scope */
+            scope?: string[] | null;
+            /** Field Path */
+            field_path?: string | null;
+            /** Thread Id */
+            thread_id?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Source Document Ids */
+            source_document_ids?: string[];
+        };
+        /** AgentRunOut */
+        AgentRunOut: {
+            /** Id */
+            id: string;
+            /** Document Id */
+            document_id: string;
+            /** Thread Id */
+            thread_id: string | null;
+            /**
+             * Run Kind
+             * @enum {string}
+             */
+            run_kind: "generate" | "enhance_field" | "assistant_turn";
+            /** Field Path */
+            field_path?: string | null;
+            status: components["schemas"]["RunStatus"];
+            /** Step History */
+            step_history: components["schemas"]["StepOut"][];
+            suggestion?: components["schemas"]["SuggestionOut"] | null;
+            /** Answer */
+            answer?: string | null;
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Trace Id */
+            trace_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Completed At */
+            completed_at?: string | null;
+        };
+        /** AuditOut */
+        AuditOut: {
+            /** Id */
+            id: number;
+            /** Field Path */
+            field_path: string | null;
+            /** Action */
+            action: string;
+            /** Value Before */
+            value_before: unknown;
+            /** Value After */
+            value_after: unknown;
+            /** Actor */
+            actor: string;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Trace Id */
+            trace_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** CitationOut */
+        CitationOut: {
+            /** Source Document Id */
+            source_document_id: string;
+            /** Snippet */
+            snippet?: string | null;
+        };
+        /** DocumentCreate */
+        DocumentCreate: {
+            /** Document Type */
+            document_type: string;
+            /** Fields */
+            fields: {
+                [key: string]: unknown;
+            };
+        };
+        /** DocumentOut */
+        DocumentOut: {
+            /** Id */
+            id: string;
+            /** Document Type */
+            document_type: string;
+            /** Title */
+            title: string;
+            my_access: components["schemas"]["Access"];
+            /** Current Version */
+            current_version: number;
+            /** Created By */
+            created_by: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Fields */
+            fields: components["schemas"]["FieldOut"][];
+            /** Active Runs */
+            active_runs: components["schemas"]["AgentRunOut"][];
+        };
+        /** DocumentSummary */
+        DocumentSummary: {
+            /** Id */
+            id: string;
+            /** Document Type */
+            document_type: string;
+            /** Title */
+            title: string;
+            my_access: components["schemas"]["Access"];
+            /** Current Version */
+            current_version: number;
+            /** Created By */
+            created_by: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DocumentTypeOut */
+        DocumentTypeOut: {
             /** Name */
             name: string;
+            /** Label */
+            label: string;
             /** Description */
             description: string;
-            /** Configured */
-            configured: boolean;
+            /** Fields */
+            fields: components["schemas"]["FieldSpecOut"][];
         };
-        /** AgentInvokeIn */
-        AgentInvokeIn: {
-            /** Message */
-            message: string;
+        /** FieldOut */
+        FieldOut: {
+            /** Field Path */
+            field_path: string;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "list";
+            /** Agent Generates */
+            agent_generates: boolean;
+            /** Value */
+            value?: unknown;
+            source?: components["schemas"]["FieldSource"] | null;
+            /** Confidence */
+            confidence?: string | null;
+            /** Confidence Reason */
+            confidence_reason?: string | null;
+            /** Reasoning */
+            reasoning?: string | null;
+            /** Citations */
+            citations?: components["schemas"]["CitationOut"][];
+            /** Agent Run Id */
+            agent_run_id?: string | null;
+            /** Updated By */
+            updated_by?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
-        /** AgentInvokeOut */
-        AgentInvokeOut: {
-            /** Agent */
-            agent: string;
-            /** Output */
-            output: string;
+        /**
+         * FieldSource
+         * @enum {string}
+         */
+        FieldSource: "user" | "agent";
+        /** FieldSpecOut */
+        FieldSpecOut: {
+            /** Field Path */
+            field_path: string;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "list";
+            /** Agent Generates */
+            agent_generates: boolean;
+            /** Required */
+            required: boolean;
+            /** Description */
+            description: string;
+        };
+        /** FieldUpdate */
+        FieldUpdate: {
+            /** Value */
+            value: unknown;
+            /** Accepted From Run Id */
+            accepted_from_run_id?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -261,6 +633,10 @@ export interface components {
              * @enum {string}
              */
             database: "ok" | "error";
+            /** Agent */
+            agent?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** MarkedRead */
         MarkedRead: {
@@ -278,33 +654,23 @@ export interface components {
             /** Permissions */
             permissions: components["schemas"]["Permission"][];
         };
-        /** NoteIn */
-        NoteIn: {
-            /** Title */
-            title: string;
-            /**
-             * Body
-             * @default
-             */
-            body: string;
-        };
-        /** NoteOut */
-        NoteOut: {
+        /** MessageOut */
+        MessageOut: {
             /** Id */
             id: number;
-            /** Title */
-            title: string;
-            /** Body */
-            body: string;
-            /** Owner */
-            owner: string;
+            /** Role */
+            role: string;
+            /** Content */
+            content: string;
+            /** Citations */
+            citations: components["schemas"]["CitationOut"][];
+            /** Agent Run Id */
+            agent_run_id: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Can Delete */
-            can_delete: boolean;
         };
         /** NotificationList */
         NotificationList: {
@@ -337,7 +703,7 @@ export interface components {
          * Permission
          * @enum {string}
          */
-        Permission: "notes:read" | "notes:write" | "notes:delete_any" | "agents:invoke" | "roles:manage";
+        Permission: "documents:create" | "agents:run" | "documents:access_any" | "roles:manage";
         /**
          * Role
          * @enum {string}
@@ -368,6 +734,66 @@ export interface components {
             /** Permissions */
             permissions: components["schemas"]["Permission"][];
         };
+        /**
+         * RunStatus
+         * @description Lifecycle of an ``agent_runs`` row.
+         *
+         *     ``queued`` is app-only (the row exists, the agent has not accepted it yet); the other values are
+         *     the agent contract's statuses, mirrored as the app polls.
+         * @enum {string}
+         */
+        RunStatus: "queued" | "accepted" | "running" | "succeeded" | "failed";
+        /** StepOut */
+        StepOut: {
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "running" | "completed" | "failed";
+            /** Started At */
+            started_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+        };
+        /** SuggestionOut */
+        SuggestionOut: {
+            /** Field Path */
+            field_path: string;
+            /** Value */
+            value: unknown;
+            /** Confidence */
+            confidence: string;
+            /** Confidence Reason */
+            confidence_reason: string;
+            /** Reasoning */
+            reasoning: string;
+            /** Citations */
+            citations?: components["schemas"]["CitationOut"][];
+        };
+        /** ThreadCreate */
+        ThreadCreate: {
+            /**
+             * Title
+             * @default Conversation
+             */
+            title: string;
+        };
+        /** ThreadOut */
+        ThreadOut: {
+            /** Id */
+            id: string;
+            /** Document Id */
+            document_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -380,6 +806,24 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VersionOut */
+        VersionOut: {
+            /** Version */
+            version: number;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Created By */
+            created_by: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
     };
     responses: never;
@@ -430,11 +874,9 @@ export interface operations {
             };
         };
     };
-    list_notes_api_notes_get: {
+    list_document_types_api_document_types_get: {
         parameters: {
-            query?: {
-                mine?: boolean;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -447,21 +889,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NoteOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["DocumentTypeOut"][];
                 };
             };
         };
     };
-    create_note_api_notes_post: {
+    list_documents_api_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentSummary"][];
+                };
+            };
+        };
+    };
+    create_document_api_documents_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -470,7 +923,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NoteIn"];
+                "application/json": components["schemas"]["DocumentCreate"];
             };
         };
         responses: {
@@ -480,7 +933,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NoteOut"];
+                    "application/json": components["schemas"]["DocumentOut"];
                 };
             };
             /** @description Validation Error */
@@ -494,12 +947,43 @@ export interface operations {
             };
         };
     };
-    delete_note_api_notes__note_id__delete: {
+    get_document_api_documents__document_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                note_id: number;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_api_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
             };
             cookie?: never;
         };
@@ -511,6 +995,396 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_field_api_documents__document_id__fields__field_path__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                field_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_versions_api_documents__document_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_api_documents__document_id__audit_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_access_api_documents__document_id__access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_document_api_documents__document_id__access_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessGrant"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unshare_document_api_documents__document_id__access__email__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                email: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_documents__document_id__agent_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_run_api_documents__document_id__agent_runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_agent_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_threads_api_documents__document_id__threads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_thread_api_documents__document_id__threads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_messages_api_threads__thread_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"][];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -702,61 +1576,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_agents_api_agents_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentInfo"][];
-                };
-            };
-        };
-    };
-    invoke_agent_api_agents__name__invoke_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentInvokeIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentInvokeOut"];
-                };
             };
             /** @description Validation Error */
             422: {

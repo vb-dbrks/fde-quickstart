@@ -1,0 +1,21 @@
+/* Neutral colours; swap in your project's own. */
+:root {
+  --ifm-color-primary: #3b4a5c;
+  --ifm-color-primary-dark: #354353;
+  --ifm-color-primary-darker: #323f4e;
+  --ifm-color-primary-darkest: #293440;
+  --ifm-color-primary-light: #415165;
+  --ifm-color-primary-lighter: #44556a;
+  --ifm-color-primary-lightest: #4d6078;
+  --ifm-code-font-size: 92%;
+}
+
+[data-theme="dark"] {
+  --ifm-color-primary: #9fb3c8;
+  --ifm-color-primary-dark: #87a0b9;
+  --ifm-color-primary-darker: #7b96b1;
+  --ifm-color-primary-darkest: #58799b;
+  --ifm-color-primary-light: #b7c6d7;
+  --ifm-color-primary-lighter: #c3cfdd;
+  --ifm-color-primary-lightest: #e6ecf2;
+}

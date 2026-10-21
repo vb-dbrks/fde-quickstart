@@ -71,6 +71,30 @@ contracts:
     - git diff --exit-code -- frontend/src/api/schema.d.ts
       || { echo "frontend/src/api/schema.d.ts is stale. Run 'make api-types' and commit."; exit 1; }
 
+agent-contract:
+  stage: check
+  extends: .uv
+  script:
+    - apt-get update -qq && apt-get install -y -qq curl make
+    - uv sync --locked --all-groups
+    # The agent on its own (fake runner), checked over HTTP: the split-deployment path.
+    - PYTHONPATH=. nohup uv run --frozen uvicorn backend.agents.server:create_agent_app
+      --factory --port 9000 > agent.log 2>&1 &
+    - for _ in $(seq 60); do curl -fs http://localhost:9000/healthz && break; sleep 1; done
+    - curl -fs http://localhost:9000/healthz || { cat agent.log; exit 1; }
+    - make contract-live AGENT_API_BASE=http://localhost:9000
+
+docs:
+  stage: check
+  image: $NODE_IMAGE
+  cache:
+    key:
+      files: [docs/package-lock.json]
+    paths: [.npm]
+  script:
+    - npm ci --prefix docs --cache .npm --prefer-offline
+    - npm run build --prefix docs
+
 .deploy:
   stage: deploy
   extends: .npm

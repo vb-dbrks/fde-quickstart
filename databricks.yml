@@ -27,12 +27,13 @@ variables:
 sync:
   exclude:
     - frontend/**
+    - docs/**
     - tests/**
     - evals/**
     - scripts/**
   include:
     # Built by `make build`. Ignored by git, so it has to be included explicitly.
-    - backend/app/static/**
+    - backend/static/**
 
 targets:
   dev:

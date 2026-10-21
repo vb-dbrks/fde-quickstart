@@ -1,22 +1,28 @@
-"""Shared fixtures: a real Postgres (pgserver, no Docker) and the app wired to it."""
+"""Shared fixtures: a real Postgres (pgserver, no Docker), the app wired to it, and the fake agent."""
 
 import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pgserver
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from sqlalchemy import text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.config import Settings
-from app.main import create_app
-from tests.helpers import ADMIN, DEV_USER, IsolatedSettings
+from backend.auth.roles import Role
+from backend.main import create_app
+from backend.settings import Settings
+from tests.helpers import ADMIN, BRIEF, DEV_USER, EDITOR, IsolatedSettings, as_user, fake_runtime
 
-TABLES = "app.notes, app.notifications, app.role_assignments"
+TABLES = (
+    "app.agent_runs, app.messages, app.threads, app.audit_log, app.document_versions, "
+    "app.document_fields, app.document_access, app.documents, app.notifications, "
+    "app.role_assignments, app.idempotency_keys"
+)
 
 
 @pytest.fixture(scope="session")
@@ -26,7 +32,7 @@ def database_url() -> Iterator[str]:
     server = pgserver.get_server(pgdata, cleanup_mode="stop")
     try:
         server.psql("CREATE DATABASE app_test;")
-        yield server.get_uri("app_test").replace("postgresql://", "postgresql+psycopg://", 1)
+        yield server.get_uri("app_test")
     finally:
         server.cleanup()
         shutil.rmtree(pgdata, ignore_errors=True)
@@ -43,30 +49,58 @@ def settings(database_url: str, tmp_path_factory: pytest.TempPathFactory) -> Set
         databricks_app_name=None,
         app_admin_emails=ADMIN,
         dev_user_email=DEV_USER,
-        llm_endpoint=None,
-        mlflow_experiment_id=None,
+        poller_enabled=False,
         notification_webhook_url=None,
         static_dir=static_dir,
     )
 
 
 @pytest.fixture(scope="session")
-def app(settings: Settings) -> Iterator[FastAPI]:
-    application = create_app(settings)
-    with TestClient(application):  # runs startup: connects and applies the migrations
+async def app(settings: Settings) -> AsyncIterator[FastAPI]:
+    application = create_app(settings, agent_runtime=fake_runtime())
+    async with application.router.lifespan_context(application):  # connects and migrates
         yield application
 
 
 @pytest.fixture
-def client(app: FastAPI) -> Iterator[TestClient]:
-    yield TestClient(app)
-    app.dependency_overrides.clear()
-    with app.state.engine.begin() as connection:
-        connection.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY"))
+async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    original_agent = app.state.agent_client
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        yield http
+    app.state.agent_client = original_agent
+    async with app.state.engine.begin() as connection:
+        await connection.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
 
 
 @pytest.fixture
-def sessions(app: FastAPI, client: TestClient) -> sessionmaker[Session]:
+def sessions(app: FastAPI, client: httpx.AsyncClient) -> async_sessionmaker[AsyncSession]:
     """Session factory; depends on ``client`` so the tables are cleaned up afterwards."""
-    factory: sessionmaker[Session] = app.state.sessionmaker
+    factory: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     return factory
+
+
+async def grant(client: httpx.AsyncClient, email: str, role: Role) -> None:
+    response = await client.post(
+        "/api/admin/role-assignments", json={"email": email, "role": role}, headers=as_user(ADMIN)
+    )
+    assert response.status_code in (200, 201), response.text
+
+
+async def create_brief(
+    client: httpx.AsyncClient, email: str = EDITOR, **fields: Any
+) -> dict[str, Any]:
+    response = await client.post(
+        "/api/documents",
+        json={"document_type": "brief", "fields": {**BRIEF, **fields}},
+        headers=as_user(email),
+    )
+    assert response.status_code == 201, response.text
+    document: dict[str, Any] = response.json()
+    return document
+
+
+@pytest.fixture
+async def editor(client: httpx.AsyncClient) -> str:
+    await grant(client, EDITOR, Role.EDITOR)
+    return EDITOR

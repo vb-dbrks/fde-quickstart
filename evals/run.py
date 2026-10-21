@@ -1,126 +1,149 @@
-"""Evaluate the assistant agent with MLflow 3.
+"""Evaluate the agent with MLflow 3.
 
-    make eval PROFILE=<cli-profile> LLM_ENDPOINT=<serving-endpoint>
+    make eval DEV=1                                      # offline: fake agent, deterministic scorers
+    make eval PROFILE=<cli-profile> LLM_ENDPOINT=<name>  # real agent + LLM judges, logged to MLflow
 
-The agent runs on your machine against a throwaway Postgres (pgserver) seeded with sample notes, and
-calls the model endpoint in your CLI profile's workspace. Results are logged to an MLflow experiment in
-that workspace (default: /Users/<you>/agent-evals). Add rows to dataset.jsonl as you learn what
-users ask; add scorers to scorers.py.
+Each row of dataset.jsonl holds a contract request (contracts/agent-api-contract.md) and the facts a
+good result contains. Rows run through the same AgentRuntime the app uses - request checks, steps,
+output checks - so an eval measures what users get. To turn a real run into a test case, copy its
+``request_payload`` from the app's agent_runs table into a new row. Scorers live in scorers.py.
+
+The real run calls the model endpoint in your CLI profile's workspace and logs to an MLflow
+experiment there (default /Users/<you>/agent-evals).
 """
 
 import argparse
-import asyncio
 import json
 import os
-import shutil
-import tempfile
-from collections.abc import Iterator
-from contextlib import contextmanager
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
-from app import migrations, notes
-from app.agents.assistant import AssistantAgent
-from app.agents.base import AgentContext
-from app.db import create_sessionmaker
-from app.permissions.roles import Role, permissions_for
-from app.permissions.service import Principal
-from evals.scorers import concise
+from backend.agents.config import AgentSettings
+from backend.agents.runtime import AgentRuntime, InlineExecutor
+from backend.agents.server import build_runtime
+from backend.contracts.agent_contract_v1 import AgentRunRequest
+from evals.scorers import DETERMINISTIC
 
 DATASET = Path(__file__).with_name("dataset.jsonl")
 EVAL_USER = "eval.user@example.com"
-SEED_NOTES = [
-    ("Kick-off meeting", "The kick-off is on Monday at 10:00 in the main meeting room."),
-    ("Decision: app state", "We decided to keep the app's state in Lakebase Postgres."),
-    ("Action items", "Alex shares the demo dataset by Friday. Sam books the user interviews."),
-]
+
+Predict = Callable[..., dict[str, Any]]
 
 
 def load_dataset(path: Path = DATASET) -> list[dict[str, Any]]:
-    with path.open() as rows:
-        return [json.loads(line) for line in rows if line.strip()]
+    """Rows with complete contract requests: ids and ``meta`` are filled in where a row omits them."""
+    rows = []
+    with path.open() as lines:
+        for index, line in enumerate(line for line in lines if line.strip()):
+            row = json.loads(line)
+            request = row["inputs"]["request"]
+            run_id = request.setdefault("app_agent_run_id", f"eval-{index + 1}")
+            request.setdefault("idempotency_key", run_id)
+            request.setdefault(
+                "meta", {"initiator": EVAL_USER, "submitted_at": "2026-01-01T00:00:00Z"}
+            )
+            AgentRunRequest.model_validate(request)  # fail early on a malformed row
+            rows.append(row)
+    return rows
 
 
-@contextmanager
-def seeded_database() -> Iterator[sessionmaker[Session]]:
-    import pgserver
+def make_predict(runtime: AgentRuntime) -> Predict:
+    def predict(request: dict[str, Any]) -> dict[str, Any]:
+        run = AgentRunRequest.model_validate(request)
+        runtime.submit(run)  # the inline executor finishes the run before submit returns
+        status = runtime.poll(run.app_agent_run_id)
+        assert status is not None
+        return status.model_dump(mode="json", exclude_none=True)
 
-    pgdata = Path(tempfile.mkdtemp(prefix="pgeval-"))
-    server = pgserver.get_server(pgdata, cleanup_mode="stop")
-    engine = create_engine(server.get_uri().replace("postgresql://", "postgresql+psycopg://", 1))
-    try:
-        migrations.upgrade(engine)
-        sessions = create_sessionmaker(engine)
-        with sessions() as session:
-            for title, body in SEED_NOTES:
-                notes.create_note(session, owner="team.lead@example.com", title=title, body=body)
-            session.commit()
-        yield sessions
-    finally:
-        engine.dispose()
-        server.cleanup()
-        shutil.rmtree(pgdata, ignore_errors=True)
+    return predict
+
+
+def evaluate_offline(rows: list[dict[str, Any]]) -> int:
+    """Run the fake agent and the deterministic scorers; return the number of failed checks."""
+    # Pinned, and no .env: a developer's local overrides must not change what is evaluated.
+    settings = AgentSettings(
+        _env_file=None,
+        agent_runner="fake",
+        agent_runner_overrides="",
+        llm_endpoint=None,
+        fake_agent_step_seconds=0,
+        fake_agent_fail_at=None,
+        fake_agent_drift="",
+        mlflow_experiment_id=None,
+        databricks_app_name=None,
+    )
+    predict = make_predict(build_runtime(settings, executor=InlineExecutor()))
+    failures = 0
+    for row in rows:
+        request = row["inputs"]["request"]
+        outputs = predict(**row["inputs"])
+        results = []
+        for check in DETERMINISTIC:
+            feedback = check.run(
+                inputs=row["inputs"], outputs=outputs, expectations=row.get("expectations")
+            )
+            if feedback is None:
+                continue
+            failures += feedback.value is not True
+            results.append(f"{check.name}={'pass' if feedback.value else 'FAIL'}")
+        print(f"{request['app_agent_run_id']:<8} {request['run_kind']:<15} {' '.join(results)}")
+    print(f"\n{failures} failed checks across {len(rows)} rows")
+    return failures
+
+
+def evaluate_with_mlflow(
+    rows: list[dict[str, Any]], *, profile: str, endpoint: str, experiment: str | None
+) -> None:
+    import mlflow
+    from databricks.sdk import WorkspaceClient
+    from mlflow.genai.scorers import Correctness, Safety
+
+    user = WorkspaceClient(profile=profile).current_user.me().user_name
+    mlflow.set_tracking_uri(f"databricks://{profile}")
+    mlflow.set_experiment(experiment or f"/Users/{user}/agent-evals")
+    mlflow.langchain.autolog()
+
+    settings = AgentSettings(
+        _env_file=None,
+        agent_runner="real",
+        agent_runner_overrides="",
+        llm_endpoint=endpoint,
+        mlflow_experiment_id=None,
+    )
+    # Inline: the model calls run in predict's thread, so they nest under the evaluation's trace.
+    runtime = build_runtime(settings, executor=InlineExecutor())
+    results = mlflow.genai.evaluate(
+        data=rows,
+        predict_fn=make_predict(runtime),
+        # Judges for meaning; syntax (Markdown, length, contract) is checked by DETERMINISTIC.
+        scorers=[Correctness(), Safety(), *DETERMINISTIC],
+    )
+    print(json.dumps(results.metrics, indent=2, default=str))
+    print(f"MLflow run: {results.run_id}")
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    parser.add_argument("--dev", action="store_true", help="offline, with the fake agent")
     parser.add_argument("--endpoint", default=os.environ.get("LLM_ENDPOINT"))
     parser.add_argument("--experiment", help="MLflow experiment path")
+    parser.add_argument("--dataset", type=Path, default=DATASET)
     args = parser.parse_args(argv)
+    rows = load_dataset(args.dataset)
+
+    if args.dev:
+        sys.exit(1 if evaluate_offline(rows) else 0)
+
     profile = os.environ.get("DATABRICKS_CONFIG_PROFILE")
     if not profile:
         parser.error("set DATABRICKS_CONFIG_PROFILE (make eval PROFILE=...); no default profile")
     if not args.endpoint:
         parser.error("set --endpoint or LLM_ENDPOINT to a Model Serving endpoint")
-
-    import mlflow
-    from databricks.sdk import WorkspaceClient
-    from mlflow.genai.scorers import Correctness, Guidelines, RelevanceToQuery, Safety
-
-    user = WorkspaceClient(profile=profile).current_user.me().user_name
-    mlflow.set_tracking_uri(f"databricks://{profile}")
-    mlflow.set_experiment(args.experiment or f"/Users/{user}/agent-evals")
-    mlflow.openai.autolog()
-
-    eval_user = Principal(
-        email=EVAL_USER,
-        display_name="Eval user",
-        roles=frozenset({Role.EDITOR}),
-        permissions=permissions_for([Role.EDITOR]),
-    )
-    with seeded_database() as sessions:
-        context = AgentContext(principal=eval_user, sessions=sessions)
-
-        def predict(message: str) -> str:
-            # A fresh agent per row: its HTTP client is tied to the event loop asyncio.run creates.
-            return asyncio.run(AssistantAgent(args.endpoint).run(context, message)).output
-
-        results = mlflow.genai.evaluate(
-            data=load_dataset(),
-            predict_fn=predict,
-            scorers=[
-                Correctness(),
-                RelevanceToQuery(),
-                Safety(),
-                Guidelines(
-                    # The app shows replies as plain text, so Markdown would appear literally.
-                    # Length is checked by the deterministic `concise` scorer: judges miscount.
-                    name="plain_text",
-                    guidelines=(
-                        "The response contains no Markdown formatting: no asterisks for bold or"
-                        " italics, no bullet points or numbered lists, and no headings."
-                    ),
-                ),
-                concise,
-            ],
-        )
-    print(json.dumps(results.metrics, indent=2, default=str))
-    print(f"MLflow run: {results.run_id}")
+    evaluate_with_mlflow(rows, profile=profile, endpoint=args.endpoint, experiment=args.experiment)
 
 
 if __name__ == "__main__":

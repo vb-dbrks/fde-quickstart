@@ -1,4 +1,4 @@
-import { Bot, ShieldCheck, StickyNote } from "lucide-react";
+import { FileText, ShieldCheck } from "lucide-react";
 import { Link } from "react-router";
 
 import { Can } from "@/components/Can";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { Health } from "@/lib/api";
 import { usePermissions } from "@/lib/permissions";
 import { useHealth } from "@/lib/queries";
 
@@ -18,7 +19,7 @@ export function HomePage() {
     <>
       <PageHeader
         title={me ? `Welcome, ${me.display_name}` : "Welcome"}
-        description="A starting point for your Databricks App: FastAPI, React and Lakebase Postgres."
+        description="A Databricks App: FastAPI and React, Lakebase as the system of record, and a stateless agent behind a versioned contract."
       />
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -50,28 +51,28 @@ export function HomePage() {
         <Card>
           <CardHeader>
             <CardTitle>System status</CardTitle>
-            <CardDescription>The API and its Lakebase database.</CardDescription>
+            <CardDescription>
+              The database and the agent each run kind is served by.
+            </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {health.isPending ? (
               <Skeleton className="h-6 w-32" />
             ) : (
-              <Badge variant={health.data?.database === "ok" ? "secondary" : "destructive"}>
-                Database: {health.data?.database === "ok" ? "connected" : "unavailable"}
-              </Badge>
+              <>
+                <Badge variant={health.data?.database === "ok" ? "secondary" : "destructive"}>
+                  Database: {health.data?.database === "ok" ? "connected" : "unavailable"}
+                </Badge>
+                <AgentStatus agent={health.data?.agent} />
+              </>
             )}
           </CardContent>
         </Card>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline">
-          <Link to="/notes">
-            <StickyNote aria-hidden /> Notes
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link to="/assistant">
-            <Bot aria-hidden /> Assistant
+          <Link to="/documents">
+            <FileText aria-hidden /> Documents
           </Link>
         </Button>
         <Can permission="roles:manage">
@@ -83,5 +84,24 @@ export function HomePage() {
         </Can>
       </div>
     </>
+  );
+}
+
+function AgentStatus({ agent }: { agent: Health["agent"] }) {
+  if (!agent) return null;
+  const runners = (agent.runners ?? {}) as Record<string, string>;
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+      <dt className="text-muted-foreground">Agent transport</dt>
+      <dd>{String(agent.transport)}</dd>
+      {Object.entries(runners).map(([kind, runner]) => (
+        <div key={kind} className="contents">
+          <dt className="text-muted-foreground">{kind}</dt>
+          <dd>
+            <Badge variant={runner === "fake" ? "outline" : "secondary"}>{runner}</Badge>
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }

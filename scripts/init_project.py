@@ -18,7 +18,7 @@ REPO = Path(__file__).resolve().parents[1]
 PLACEHOLDER = re.compile(r"\{\{([a-z_]+)\}\}")
 # Files whose placeholders must all be filled before deploying.
 DEPLOY_FILES = ["databricks.yml", "resources/*.yml", "app.yaml", "frontend/index.html"]
-# The README keeps its checklist as-is; only its title is filled in.
+# Only the README's title is filled in; its instructions keep the placeholder names.
 README = "README.md"
 
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,18}[a-z0-9]$")
