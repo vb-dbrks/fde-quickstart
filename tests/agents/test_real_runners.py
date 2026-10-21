@@ -194,6 +194,24 @@ def test_nested_lists_sent_as_json_strings_are_decoded() -> None:
     assert {f.field_path for f in run.output.fields} == {f.field_path for f in fields}
 
 
+def test_json_strings_missing_their_closing_brackets_are_repaired() -> None:
+    fields = [generated("brief.risks", ['Say "no" to scope creep', "Slip \\ late"])]
+    encoded = json.dumps([field.model_dump() for field in fields])
+    assert encoded.endswith("]}]")
+    args = {"fields": encoded[:-2]}  # the model stopped two brackets short
+    reply = AIMessage(content="", tool_calls=[{"name": "GeneratedFields", "args": args, "id": "1"}])
+    model = ScriptedModel().queue(reply)
+    runtime = runtime_for(model)
+    request = make_request(generate_context={"scope": ["brief.risks"]})
+    runtime.submit(request)
+    run = runtime.poll("run-1")
+    assert run is not None
+    assert run.status == "succeeded", run.error
+    assert run.output is not None
+    assert run.output.fields[0].value == ['Say "no" to scope creep', "Slip \\ late"]
+    assert len(model.prompts) == 1  # repaired, not retried
+
+
 def test_json_in_the_text_is_accepted_without_a_tool_call() -> None:
     parts: list[str | dict[str, Any]] = [
         {"type": "text", "text": 'Here you go: {"content": "Plain answer."}'}

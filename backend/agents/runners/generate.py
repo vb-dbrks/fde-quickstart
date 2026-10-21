@@ -42,7 +42,9 @@ class GeneratedField(BaseModel):
 
 
 class GeneratedFields(BaseModel):
-    fields: list[GeneratedField]
+    fields: list[GeneratedField] = Field(
+        description="One object per requested field: a JSON array, not a JSON-encoded string."
+    )
 
 
 def make_generate_runner(

@@ -141,11 +141,36 @@ def _decode_nested_json(value: Any) -> Any:
     if isinstance(value, list):
         return [_decode_nested_json(item) for item in value]
     if isinstance(value, str) and value.lstrip()[:1] in ("[", "{"):
-        try:
-            return _decode_nested_json(json.loads(value))
-        except ValueError:
-            return value  # text that merely starts with a bracket
+        for candidate in (value, _close_brackets(value)):
+            try:
+                return _decode_nested_json(json.loads(candidate))
+            except ValueError:
+                continue
+        return value  # text that merely starts with a bracket
     return value
+
+
+def _close_brackets(text: str) -> str:
+    """Append the closing brackets a JSON string is missing - models sometimes stop one or two short
+    when they encode nested JSON as a string."""
+    closers = {"[": "]", "{": "}"}
+    open_brackets: list[str] = []
+    in_string = escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in closers:
+            open_brackets.append(closers[char])
+        elif char in "]}" and open_brackets:
+            open_brackets.pop()
+    return text if in_string else text + "".join(reversed(open_brackets))
 
 
 def invoke[SchemaT: BaseModel](
