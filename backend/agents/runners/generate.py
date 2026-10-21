@@ -1,5 +1,6 @@
 """generate: draft every requested agent field of a document, with confidence and citations."""
 
+import logging
 from typing import Literal
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -23,6 +24,8 @@ from backend.agents.runtime import AgentRunFailed, RunFn, Steps
 from backend.contracts.agent_contract_v1 import AgentOutput, AgentRunRequest, OutputField
 from backend.contracts.field_catalog import FieldCatalog
 from backend.contracts.validation import requested_fields
+
+logger = logging.getLogger(__name__)
 
 PROMPT = ChatPromptTemplate.from_messages([("system", "{instructions}"), ("human", "{payload}")])
 
@@ -68,18 +71,25 @@ def make_generate_runner(
                 GeneratedFields,
             )
         with steps.step("checking_citations"):
-            fields = [
-                OutputField(
-                    field_path=item.field_path,
-                    value=shape_value(specs[item.field_path], item.value),
-                    confidence=item.confidence,
-                    confidence_reason=item.confidence_reason,
-                    reasoning=item.reasoning,
-                    citations=known_citations(item.citations, request),
+            fields: list[OutputField] = []
+            for item in result.fields:
+                # The contract allows each requested field once. Models now and then write a field
+                # twice or add one that wasn't asked for: keep the first, drop the rest.
+                if item.field_path not in specs or any(
+                    f.field_path == item.field_path for f in fields
+                ):
+                    logger.info("Dropped extra or repeated field %s", item.field_path)
+                    continue
+                fields.append(
+                    OutputField(
+                        field_path=item.field_path,
+                        value=shape_value(specs[item.field_path], item.value),
+                        confidence=item.confidence,
+                        confidence_reason=item.confidence_reason,
+                        reasoning=item.reasoning,
+                        citations=known_citations(item.citations, request),
+                    )
                 )
-                for item in result.fields
-                if item.field_path in specs
-            ]
         return AgentOutput(fields=fields, meta=output_meta("generate", agent_version, model_name))
 
     return run

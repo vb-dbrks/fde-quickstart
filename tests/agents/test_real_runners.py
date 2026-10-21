@@ -205,6 +205,15 @@ def test_json_in_the_text_is_accepted_without_a_tool_call() -> None:
     assert run.output.answer.content == "Plain answer."
 
 
+def test_repeated_and_unrequested_fields_are_dropped() -> None:
+    first, again = generated("brief.summary", "First."), generated("brief.summary", "Again.")
+    extra = generated("brief.title", "Not an agent field")
+    run = run_once(ScriptedModel().queue(GeneratedFields(fields=[first, again, extra])))
+    assert run.status == "succeeded", run.error
+    assert run.output is not None
+    assert [(f.field_path, f.value) for f in run.output.fields] == [("brief.summary", "First.")]
+
+
 def test_a_value_without_its_confidence_is_kept_at_low_confidence() -> None:
     args = {"value": "Shorter.", "citations": []}  # no confidence, confidence_reason or reasoning
     reply = AIMessage(content="", tool_calls=[{"name": "FieldRevision", "args": args, "id": "1"}])
