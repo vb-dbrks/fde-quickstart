@@ -23,6 +23,8 @@ from backend.contracts.agent_contract_v1 import (
     AgentRunRequest,
     AgentRunStatus,
     AgentStep,
+    FeedbackRequest,
+    FeedbackResult,
 )
 from backend.contracts.field_catalog import FieldCatalog
 from backend.contracts.validation import check_output, check_request
@@ -204,6 +206,15 @@ class AgentRuntime:
             )
             return
         self._finish(run_id, steps, handle, output=output)
+
+    def record_feedback(self, feedback: FeedbackRequest) -> FeedbackResult:
+        """Store a user's feedback on a run's trace. Needs only the trace id: no run state."""
+        assessment_id = self._tracer.record_feedback(feedback)
+        return FeedbackResult(
+            feedback_id=feedback.feedback_id,
+            recorded=assessment_id is not None,
+            assessment_id=assessment_id,
+        )
 
     def _finish(
         self,

@@ -22,3 +22,7 @@ docs/.docusaurus/
 .env
 .local/
 .DS_Store
+
+# Rows exported from users' feedback hold real user content (make eval-dataset)
+evals/feedback_dataset.jsonl
+mlruns/

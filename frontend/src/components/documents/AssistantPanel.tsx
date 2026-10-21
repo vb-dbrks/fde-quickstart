@@ -3,16 +3,23 @@ import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/EmptyState";
+import { RatingControl } from "@/components/documents/RatingControl";
 import { RunProgress } from "@/components/documents/RunProgress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { keyed, type AgentRun } from "@/lib/api";
+import { keyed, type AgentRun, type Message } from "@/lib/api";
 import { isTerminal, useAgentRun } from "@/lib/agentRuns";
 import { formatDateTime } from "@/lib/format";
-import { useCreateThread, useMessages, useStartAgentRun, useThreads } from "@/lib/queries";
+import {
+  useCreateThread,
+  useMessages,
+  useRateAnswer,
+  useStartAgentRun,
+  useThreads,
+} from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 /**
@@ -153,6 +160,11 @@ function Conversation({
             )}
           >
             {item.content}
+            {item.role === "assistant" && item.agent_run_id && threadId && (
+              <div className="-mr-2 -mb-1 flex justify-end">
+                <AnswerRating threadId={threadId} message={item} />
+              </div>
+            )}
           </li>
         ))}
         {run && !isTerminal(run.status) && (
@@ -185,5 +197,18 @@ function Conversation({
         The app sends the agent this document and the recent conversation with every message.
       </p>
     </div>
+  );
+}
+
+function AnswerRating({ threadId, message }: { threadId: string; message: Message }) {
+  const rate = useRateAnswer(threadId, message.id);
+  return (
+    <RatingControl
+      label="this answer"
+      current={message.my_rating}
+      rate={(rating, options) =>
+        rate.mutate(rating, { ...options, onError: (error) => toast.error(error.message) })
+      }
+    />
   );
 }

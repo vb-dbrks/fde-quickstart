@@ -22,6 +22,7 @@ domain is a "brief" document whose fields the agent drafts; projects replace it 
 | `make migration MSG="..."` | after changing `backend/domain/models.py` |
 | `make contract` | after touching the agent, the contract or the field catalog |
 | `make eval DEV=1` | after changing prompts or runners (offline, fake agent) |
+| `make eval-dataset PROFILE= EXPERIMENT=` | turn users' feedback on real runs (MLflow traces) into eval rows |
 
 **Before you say you're done: `make lint test` must pass.** If you changed the API, run
 `make api-types` first and commit the regenerated `frontend/src/api/schema.d.ts`.
@@ -53,7 +54,11 @@ domain is a "brief" document whose fields the agent drafts; projects replace it 
    tool once."
 9. **No secrets in the repo.** `.env` is local and ignored. Lockfiles must point at public registries
    (`make lock`, checked by `scripts/check_lockfiles.sh`).
-10. **Workspace commands take `PROFILE=` explicitly.** Nothing uses the default Databricks CLI
+10. **Users' feedback goes to the run's trace through the agent.** Record it with
+    `backend/services/feedback.py` (stored in Lakebase first, delivered afterwards); never call MLflow
+    from the app. Use the contract's feedback vocabulary (`FEEDBACK_NAMES`, `FEEDBACK_REASONS`) so
+    traces stay comparable. See `docs/content/guides/user-feedback.md`.
+11. **Workspace commands take `PROFILE=` explicitly.** Nothing uses the default Databricks CLI
     profile; each bundle target pins its host.
 
 ## Where things go

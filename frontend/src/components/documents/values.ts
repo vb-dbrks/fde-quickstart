@@ -1,4 +1,4 @@
-import type { Access, FieldSpec } from "@/lib/api";
+import type { Access, FeedbackReason, FieldSpec } from "@/lib/api";
 
 type FieldType = FieldSpec["type"];
 
@@ -6,6 +6,19 @@ export const ACCESS_LABELS: Record<Access, string> = {
   view: "Can view",
   edit: "Can edit",
   owner: "Owner",
+};
+
+/** Reasons a user can give with a rating (the agent contract's feedback vocabulary). */
+export const GOOD_REASONS: Partial<Record<FeedbackReason, string>> = {
+  accurate: "Accurate",
+  usable_as_is: "Usable as is",
+};
+export const BAD_REASONS: Partial<Record<FeedbackReason, string>> = {
+  factually_incorrect: "Factually incorrect",
+  unsupported_by_sources: "Not supported by the sources",
+  missing_detail: "Missing detail",
+  too_long: "Too long",
+  wrong_tone: "Wrong tone or style",
 };
 
 /** The value as editable text: list fields have one item per line. */

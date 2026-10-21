@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Background poller that finishes runs nobody is watching (ADR 0003).
     poller_enabled: bool = True
     poller_interval_seconds: int = 10
+    # Users' feedback goes to the run's MLflow trace right after it is given; this worker retries
+    # what didn't get through (same switch as the poller).
+    feedback_retry_interval_seconds: int = 30
     # Chat turns sent to the agent with each assistant message (oldest first, newest kept).
     assistant_history_limit: int = 20
 

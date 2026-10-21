@@ -1,5 +1,8 @@
 """Test users, settings and agent runtimes."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -9,8 +12,10 @@ from pydantic_settings import SettingsConfigDict
 from backend.agents.config import AgentSettings
 from backend.agents.runtime import AgentRuntime, InlineExecutor
 from backend.agents.server import build_runtime, create_agent_app
+from backend.agents.tracing import NoopTracer, RunTracer, TraceHandle
 from backend.auth.principal import Principal
 from backend.auth.roles import Role, permissions_for
+from backend.contracts.agent_contract_v1 import AgentRunRequest, FeedbackRequest
 from backend.services.agent_client import AgentClient
 from backend.settings import Settings
 
@@ -31,7 +36,7 @@ class IsolatedAgentSettings(AgentSettings):
     model_config = SettingsConfigDict(env_file=None, extra="ignore")
 
 
-def fake_runtime(**overrides: Any) -> AgentRuntime:
+def fake_runtime(tracer: RunTracer | None = None, **overrides: Any) -> AgentRuntime:
     """The fake agent with no step delays, executing inline."""
     settings = IsolatedAgentSettings(
         agent_runner="fake",
@@ -40,7 +45,29 @@ def fake_runtime(**overrides: Any) -> AgentRuntime:
         mlflow_experiment_id=None,
         **overrides,
     )
-    return build_runtime(settings, executor=InlineExecutor())
+    return build_runtime(settings, executor=InlineExecutor(), tracer=tracer)
+
+
+class RecordingTracer(NoopTracer):
+    """A stand-in for MLflow: gives every run a trace id and keeps the feedback it is sent.
+    ``fail`` makes it act like an unreachable trace store."""
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.recorded: list[FeedbackRequest] = []
+        self.fail = fail
+
+    @contextmanager
+    def trace(self, request: AgentRunRequest) -> Iterator[TraceHandle]:
+        span = SimpleNamespace(
+            trace_id=f"tr-{request.app_agent_run_id}", set_outputs=lambda _: None
+        )
+        yield TraceHandle(span)
+
+    def record_feedback(self, feedback: FeedbackRequest) -> str | None:
+        if self.fail:
+            raise ConnectionError("trace store unreachable")
+        self.recorded.append(feedback)
+        return f"a-{len(self.recorded)}"
 
 
 def use_runtime(app: FastAPI, runtime: AgentRuntime) -> AgentClient:

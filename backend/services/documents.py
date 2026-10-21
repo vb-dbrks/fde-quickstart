@@ -22,6 +22,7 @@ from backend.domain.models import (
     DocumentField,
     DocumentVersion,
 )
+from backend.services import feedback
 
 
 def document_type(catalog: FieldCatalog, name: str) -> DocumentTypeSpec:
@@ -200,6 +201,18 @@ async def update_field(
 
     existing = (await field_rows(db, document.id)).get(field_path)
     before = existing.value if existing else None
+    # Feedback on the agent (services/feedback.py): accepting a suggestion is a verdict; changing a
+    # value the agent wrote makes the new value the expected one for the run that wrote it.
+    if accepted_run is not None:
+        await feedback.record_verdict(db, principal, accepted_run, field_path, accepted=True)
+    elif (
+        existing is not None
+        and existing.source == FieldSource.AGENT
+        and existing.agent_run_id
+        and clean != existing.value
+        and (written_by := await db.get(AgentRun, existing.agent_run_id)) is not None
+    ):
+        await feedback.record_correction(db, principal, written_by, field_path, clean)
     values = {"value": clean, "updated_by": principal.email, **provenance}
     statement = insert(DocumentField).values(
         document_id=document.id, field_path=field_path, **values

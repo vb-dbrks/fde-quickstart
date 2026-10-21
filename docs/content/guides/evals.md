@@ -68,6 +68,10 @@ Every run's request is stored exactly as sent in `agent_runs.request_payload`. T
 went wrong as a regression case, copy that JSON into a new row under `inputs.request`, add the facts a
 good answer contains, and run `make eval`.
 
+Users do much of this for you: their ratings and corrections are stored on each run's trace, and
+`make eval-dataset` exports the traces they gave feedback on as rows, with corrections as expected
+facts ([User feedback and evaluation](user-feedback.md)).
+
 ## When to run it
 
 - Before and after a prompt change (`backend/agents/prompts/`), and bump its version in

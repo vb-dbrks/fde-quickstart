@@ -11,7 +11,7 @@ DOCS_NPM := npm --prefix docs
 BUNDLE = databricks bundle
 
 .PHONY: help init setup dev agent db-stop lint fmt test contract contract-live build api-types \
-	migration lock check-lock docs docs-build deploy ci-deploy destroy eval
+	migration lock check-lock docs docs-build deploy ci-deploy destroy eval eval-dataset
 
 help: ## Show the available targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -72,6 +72,10 @@ else
 	@test -n "$(PROFILE)" -a -n "$(LLM_ENDPOINT)" || { echo "Set PROFILE and LLM_ENDPOINT, or DEV=1 to run offline"; exit 1; }
 	DATABRICKS_CONFIG_PROFILE=$(PROFILE) LLM_ENDPOINT=$(LLM_ENDPOINT) $(UV_RUN) python -m evals.run
 endif
+
+eval-dataset: guard-PROFILE guard-EXPERIMENT ## Rows from users' feedback: make eval-dataset PROFILE=... EXPERIMENT=<id or path> [DAYS=30] [UC_TABLE=]
+	DATABRICKS_CONFIG_PROFILE=$(PROFILE) $(UV_RUN) python -m evals.from_feedback \
+		--experiment "$(EXPERIMENT)" --days $(or $(DAYS),30) $(if $(UC_TABLE),--uc-table "$(UC_TABLE)")
 
 # ---- build -------------------------------------------------------------------------------------
 

@@ -21,7 +21,7 @@ from tests.helpers import ADMIN, BRIEF, DEV_USER, EDITOR, IsolatedSettings, as_u
 TABLES = (
     "app.agent_runs, app.messages, app.threads, app.audit_log, app.document_versions, "
     "app.document_fields, app.document_access, app.documents, app.notifications, "
-    "app.role_assignments, app.idempotency_keys"
+    "app.role_assignments, app.idempotency_keys, app.feedback"
 )
 
 

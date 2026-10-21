@@ -306,3 +306,131 @@ describe("document workspace", () => {
     expect(requestsTo(fetchMock, "POST", "/api/documents/doc-1/threads")).toHaveLength(1);
   });
 });
+
+describe("feedback on the agent", () => {
+  const drafted = makeDocument({
+    fields: [
+      field("brief.title", { value: "Onboarding refresh", source: "user" }),
+      field("brief.goal", { value: "Reach first value in three days.", source: "user" }),
+      field("brief.summary", {
+        value: "A drafted summary.",
+        source: "agent",
+        agent_run_id: "run-1",
+      }),
+      field("brief.risks"),
+    ],
+  });
+  const rated = { rating: false, reasons: [], comment: null };
+
+  it("rates a field in one click, then sends the reasons", async () => {
+    const fetchMock = mockApi({
+      "/api/me": editor,
+      "/api/notifications": noNotifications,
+      "/api/documents": [summaryOf(drafted)],
+      "/api/documents/doc-1": drafted,
+      "PUT /api/documents/doc-1/fields/brief.summary/rating": rated,
+    });
+    const user = userEvent.setup();
+    renderApp("/documents/doc-1");
+
+    // Only values the agent wrote can be rated.
+    expect(screen.queryByRole("group", { name: "Rate Goal" })).not.toBeInTheDocument();
+    const rating = await screen.findByRole("group", { name: "Rate Summary" });
+    await user.click(within(rating).getByRole("button", { name: "Not good" }));
+    const details = await screen.findByRole("dialog");
+    expect(within(details).getByText("What was wrong?")).toBeVisible();
+    await user.click(within(details).getByRole("button", { name: "Not supported by the sources" }));
+    await user.type(within(details).getByLabelText("Comment"), "Not in the notes");
+    await user.click(within(details).getByRole("button", { name: "Send" }));
+
+    const url = "/api/documents/doc-1/fields/brief.summary/rating";
+    await waitFor(() => expect(requestsTo(fetchMock, "PUT", url)).toHaveLength(2));
+    const [first, second] = requestsTo(fetchMock, "PUT", url);
+    expect(await first?.json()).toEqual(rated);
+    expect(await second?.json()).toEqual({
+      rating: false,
+      reasons: ["unsupported_by_sources"],
+      comment: "Not in the notes",
+    });
+  });
+
+  it("tells the server when a suggestion is dismissed", async () => {
+    const suggestionRun = makeRun({
+      id: "run-2",
+      run_kind: "enhance_field",
+      field_path: "brief.summary",
+      status: "succeeded",
+      step_history: completedSteps,
+      suggestion: {
+        field_path: "brief.summary",
+        value: "A shorter summary.",
+        confidence: "high",
+        confidence_reason: "",
+        reasoning: "",
+        citations: [],
+      },
+    });
+    const fetchMock = mockApi({
+      "/api/me": editor,
+      "/api/notifications": noNotifications,
+      "/api/documents": [summaryOf(drafted)],
+      "/api/documents/doc-1": drafted,
+      "POST /api/documents/doc-1/agent-runs": Response.json(
+        makeRun({ id: "run-2", run_kind: "enhance_field", field_path: "brief.summary" }),
+        { status: 202 },
+      ),
+      "/api/agent-runs/run-2": suggestionRun,
+      "POST /api/agent-runs/run-2/dismiss": new Response(null, { status: 204 }),
+    });
+    const user = userEvent.setup();
+    renderApp("/documents/doc-1");
+
+    await user.click(await screen.findByRole("button", { name: "Improve Summary with the agent" }));
+    await user.click(screen.getByRole("button", { name: /Suggest a revision/ }));
+    const review = await screen.findByRole("region", { name: "Suggested revision" }, POLL);
+    await user.click(within(review).getByRole("button", { name: "Dismiss" }));
+
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, "POST", "/api/agent-runs/run-2/dismiss")).toHaveLength(1),
+    );
+    expect(screen.queryByRole("region", { name: "Suggested revision" })).not.toBeInTheDocument();
+  });
+
+  it("rates an assistant answer", async () => {
+    const thread = {
+      id: "t-1",
+      document_id: "doc-1",
+      title: "Conversation",
+      created_at: "2026-10-21T09:00:00Z",
+    };
+    const message = (id: number, role: string, content: string, runId: string | null) => ({
+      id,
+      role,
+      content,
+      citations: [],
+      agent_run_id: runId,
+      created_at: "2026-10-21T09:00:00Z",
+    });
+    const fetchMock = mockApi({
+      "/api/me": editor,
+      "/api/notifications": noNotifications,
+      "/api/documents": [summaryOf(drafted)],
+      "/api/documents/doc-1": drafted,
+      "/api/documents/doc-1/threads": [thread],
+      "/api/threads/t-1/messages": [
+        message(1, "user", "What is the goal?", "run-3"),
+        message(2, "assistant", "To onboard fast.", "run-3"),
+      ],
+      "PUT /api/messages/2/rating": { rating: true, reasons: [], comment: null },
+    });
+    const user = userEvent.setup();
+    renderApp("/documents/doc-1?tab=assistant");
+
+    const rating = await screen.findByRole("group", { name: "Rate this answer" });
+    expect(screen.getAllByRole("group", { name: "Rate this answer" })).toHaveLength(1);
+    await user.click(within(rating).getByRole("button", { name: "Good" }));
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, "PUT", "/api/messages/2/rating")).toHaveLength(1),
+    );
+  });
+});

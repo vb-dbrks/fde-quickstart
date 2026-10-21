@@ -45,7 +45,8 @@ def load_dataset(path: Path = DATASET) -> list[dict[str, Any]]:
                 "meta", {"initiator": EVAL_USER, "submitted_at": "2026-01-01T00:00:00Z"}
             )
             AgentRunRequest.model_validate(request)  # fail early on a malformed row
-            rows.append(row)
+            # Only what evaluate() takes: rows from from_feedback.py also carry the raw feedback.
+            rows.append({"inputs": row["inputs"], "expectations": row.get("expectations", {})})
     return rows
 
 
