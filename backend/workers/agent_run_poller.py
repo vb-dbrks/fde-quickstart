@@ -6,7 +6,8 @@ nobody is watching (closed tab, navigation away).
 
 Concurrency: ``refresh_run`` locks the run row and materialisation is guarded by
 ``materialised_at``, so this worker, the UI and several app instances can all poll the same run
-safely. Each run is skipped until its per-status interval has passed (``last_polled_at``).
+safely. A run polled in the last ``MIN_INTERVAL`` (``last_polled_at``) - usually by the UI - is left
+for the next sweep.
 """
 
 import asyncio

@@ -3,18 +3,20 @@
 from typing import Literal
 
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.agents.llm import ModelFactory
 from backend.agents.runners._common import (
     ModelCitation,
     field_payload,
+    fill_missing_metadata,
     invoke,
     known_citations,
     load_prompt,
     output_meta,
     shape_value,
     sources_payload,
+    structured,
     to_json,
 )
 from backend.agents.runtime import AgentRunFailed, RunFn, Steps
@@ -30,6 +32,8 @@ class FieldRevision(BaseModel):
     confidence_reason: str = Field(description="One sentence: why this confidence.")
     reasoning: str = Field(description="One sentence: what you changed and why.")
     citations: list[ModelCitation] = Field(default_factory=list)
+
+    _fill_missing_metadata = model_validator(mode="before")(fill_missing_metadata)
 
 
 def make_enhance_field_runner(
@@ -50,7 +54,7 @@ def make_enhance_field_runner(
                 "sources": sources_payload(request),
             }
         with steps.step("suggesting_revision"):
-            chain = PROMPT | model().with_structured_output(FieldRevision)
+            chain = PROMPT | structured(model(), FieldRevision)
             result = invoke(
                 chain,
                 {"instructions": load_prompt("enhance_field"), "payload": to_json(payload)},

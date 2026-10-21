@@ -9,10 +9,10 @@ import logging
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
-from concurrent.futures import Executor
+from concurrent.futures import Executor, Future
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
 from backend.agents.tracing import NoopTracer, RunTracer, TraceHandle
 from backend.contracts.agent_contract_v1 import (
@@ -28,6 +28,24 @@ from backend.contracts.field_catalog import FieldCatalog
 from backend.contracts.validation import check_output, check_request
 
 logger = logging.getLogger(__name__)
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+class InlineExecutor(Executor):
+    """Runs submitted work in the calling thread, so a run has finished when ``submit`` returns.
+
+    For evals (model calls trace under the evaluation's trace) and tests (deterministic runs).
+    """
+
+    def submit(self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
+        future: Future[T] = Future()
+        try:
+            future.set_result(fn(*args, **kwargs))
+        except BaseException as exc:
+            future.set_exception(exc)
+        return future
 
 
 class AgentRunFailed(Exception):

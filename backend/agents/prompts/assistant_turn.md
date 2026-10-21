@@ -15,3 +15,4 @@ Rules:
 - Keep answers short: at most a few sentences. Write plain text without Markdown. To list several
   things, name them in a sentence, separated by commas.
 - Cite a source only when the answer relies on it.
+- Answer by calling the provided tool once.

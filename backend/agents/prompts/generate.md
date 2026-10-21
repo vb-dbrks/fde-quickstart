@@ -16,3 +16,4 @@ Rules:
 - Confidence: high when the inputs state it directly, medium when you inferred it, low when you
   had to guess.
 - Write plain text without Markdown. List items are short phrases or single sentences.
+- Answer by calling the provided tool once, with every requested field.

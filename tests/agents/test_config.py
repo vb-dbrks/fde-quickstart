@@ -1,7 +1,10 @@
+import databricks_langchain
 import pytest
 
+from backend.agents.llm import chat_model_factory
+from backend.agents.runtime import InlineExecutor
 from backend.agents.server import build_runtime
-from tests.helpers import InlineExecutor, IsolatedAgentSettings
+from tests.helpers import IsolatedAgentSettings
 
 
 def test_runners_default_to_fake_without_an_endpoint() -> None:
@@ -41,3 +44,15 @@ def test_mixed_runtimes_report_their_runners() -> None:
     )
     runtime = build_runtime(settings, executor=InlineExecutor())
     assert runtime.runner_names["assistant_turn"] == "real"
+
+
+def test_the_model_gets_no_temperature_unless_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Some endpoints (recent Claude models) answer 400 BAD_REQUEST to any temperature."""
+    created: list[dict[str, object]] = []
+    monkeypatch.setattr(databricks_langchain, "ChatDatabricks", lambda **kw: created.append(kw))
+    chat_model_factory("my-endpoint")()
+    chat_model_factory("my-endpoint", temperature=0.3)()
+    assert created == [
+        {"endpoint": "my-endpoint", "temperature": None},
+        {"endpoint": "my-endpoint", "temperature": 0.3},
+    ]

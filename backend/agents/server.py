@@ -49,7 +49,7 @@ def build_runtime(
         if not settings.llm_endpoint:
             raise RuntimeError("AGENT_RUNNER=real needs LLM_ENDPOINT (a Model Serving endpoint).")
         real = real_runners(
-            chat_model_factory(settings.llm_endpoint),
+            chat_model_factory(settings.llm_endpoint, temperature=settings.llm_temperature),
             catalog,
             agent_version=settings.agent_version,
             model_name=settings.llm_endpoint,

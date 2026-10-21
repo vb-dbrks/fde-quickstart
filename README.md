@@ -1,49 +1,61 @@
 # {{project_title}}
 
 A quick-start for Databricks Apps engagements: a FastAPI backend and a React frontend in one app,
-app state in Lakebase Postgres, deployed to dev/test/prod with Declarative Automation Bundles.
-It ships with a permissions model, in-app notifications, an agent with an MLflow evaluation harness,
-and CI/CD for GitHub Actions and GitLab.
+Lakebase Postgres as the system of record, and a **stateless agent** behind a versioned async
+submit/poll contract. Deployed to dev/test/prod with Declarative Automation Bundles, with CI/CD for
+GitHub Actions and GitLab.
+
+The app owns all state. For every agent run it sends the agent the full context (the document's
+fields, the source documents the user picked, the recent conversation), polls the run, and
+materialises the result in Lakebase - fields with provenance, a version snapshot and an audit trail -
+in one transaction. The agent keeps nothing between runs. A deterministic **fake agent** speaks the
+same contract, so app and agent work proceed in parallel.
 
 | Layer | What you get |
 | --- | --- |
-| Backend | Python 3.12, FastAPI, SQLAlchemy 2 + psycopg 3, Alembic migrations run at startup |
+| Backend | Python 3.12, FastAPI, async SQLAlchemy 2 + psycopg 3, Alembic migrations run at startup |
+| Agent | LangChain on `ChatDatabricks` with structured output, MLflow tracing; runs in-process behind the HTTP contract and splits into its own app with one setting |
+| Contract | Golden-record Markdown (`contracts/agent-api-contract.md`), frozen Pydantic models, a field catalog, tests that validate every example |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui (Radix), TanStack Query, React Router, API types generated from FastAPI |
 | Data | Lakebase Postgres (one project per target); local dev and tests use real Postgres via pgserver, no Docker |
-| Access | Databricks Apps sign-in, plus app roles (viewer, editor, admin) with permission checks in the API and the UI |
+| Access | Databricks Apps sign-in, app roles (viewer, editor, admin) and per-document sharing (view, edit, owner) |
 | Notifications | In-app inbox with a bell menu (polling), and a webhook channel for Slack-compatible hooks |
-| Agents | OpenAI Agents SDK on a Databricks Model Serving endpoint, tools that act as the calling user, MLflow tracing |
-| Evals | MLflow 3 `mlflow.genai.evaluate` with built-in judges and a custom scorer |
+| Evals | MLflow 3 `mlflow.genai.evaluate` with LLM judges and deterministic scorers; offline mode with the fake agent |
+| Docs | Docusaurus site in `docs/`: architecture, nine ADRs and guides |
 | Tooling | uv, ruff, mypy (strict), pytest, ESLint, Prettier, Vitest, one Makefile |
 | CI/CD | GitHub Actions and GitLab CI: checks on every change, deploys with workload identity federation (no stored secrets) |
 
 ## Layout
 
 ```
-├── app.yaml                 Databricks Apps start command and environment
-├── databricks.yml           bundle: variables, sync rules, dev/test/prod targets
-├── resources/               app, Lakebase project/role/database, MLflow experiment
-├── backend/app/
-│   ├── main.py              app factory; runs migrations on startup, serves the SPA
-│   ├── config.py db.py      settings; engine with Lakebase OAuth token injection
-│   ├── identity.py          user from the Databricks Apps proxy headers
-│   ├── permissions/         roles → permissions, require() dependency, role grants
-│   ├── notifications/       notify(), in-app and webhook channels
-│   ├── agents/              agent protocol, tools, model client, example assistant, prompts
-│   ├── routes/              /api: health, me, notes, notifications, admin, agents
-│   ├── migrations/          Alembic
-│   └── static/              built frontend (generated, not committed)
+├── app.yaml                     Databricks Apps start command and environment
+├── databricks.yml               bundle: variables, sync rules, dev/test/prod targets
+├── resources/                   app, Lakebase project/role/database, MLflow experiment
+├── contracts/
+│   ├── agent-api-contract.md    golden record: endpoints, envelopes, run kinds, steps, errors, examples
+│   └── field-catalog.yaml       document types and fields; which fields the agent writes
+├── backend/                     the app, run as `python -m backend`
+│   ├── main.py                  lifespan: migrations, agent client, poller; serves the SPA
+│   ├── api/                     /api routes: documents, agent-runs, threads, notifications, admin
+│   ├── services/                agent client + payload builder, run lifecycle, materialise, documents
+│   ├── db/ domain/              engine (Lakebase OAuth token per connection), models, schemas
+│   ├── auth/                    identity from the Apps proxy, roles, per-document access
+│   ├── middleware/ workers/     Idempotency-Key handling; background run poller
+│   ├── contracts/               contract models + catalog loader (shared by app and agent)
+│   ├── agents/                  the agent: server, runtime, LangChain runners, prompts, fake agent
+│   └── static/                  built frontend (generated, not committed)
+├── alembic/  alembic.ini        migrations (baseline 0001)
 ├── frontend/src/
-│   ├── app/                 shell: sidebar, header, notification bell, user menu
-│   ├── pages/               Home, Notes, Assistant, Users & roles, 404
-│   ├── components/ui/       shadcn/ui components
-│   ├── lib/                 typed API client, queries, permissions hook, theme
-│   └── api/schema.d.ts      generated from the FastAPI schema (`make api-types`)
-├── tests/                   pytest against real Postgres
-├── evals/                   MLflow evaluation of the agent
-├── scripts/                 init, local Postgres, dev server, lockfile helpers
-├── .github/workflows/       CI and deploy (GitHub Actions)
-└── .gitlab-ci.yml           CI and deploy (GitLab)
+│   ├── pages/                   Home, Documents, document workspace, Users & roles
+│   ├── components/documents/    field cards, run progress, provenance, assistant, history, sharing
+│   ├── lib/                     typed API client, queries, useAgentRun polling hook, permissions
+│   └── api/schema.d.ts          generated from the FastAPI schema (`make api-types`)
+├── tests/                       backend/ (real Postgres), agents/, contracts/
+├── evals/                       MLflow evaluation of the agent
+├── docs/                        documentation site (`make docs`)
+├── scripts/                     init, local Postgres, dev server, lockfile helpers
+├── .github/workflows/           CI and deploy (GitHub Actions)
+└── .gitlab-ci.yml               CI and deploy (GitLab)
 ```
 
 ## Prerequisites
@@ -74,7 +86,7 @@ and CI/CD for GitHub Actions and GitLab.
    | `project_title` | UI title and README heading (defaults to the name in title case) |
    | `admin_emails` | users who are always admins, so someone can grant roles after the first deploy |
    | `dev_host`, `test_host`, `prod_host` | workspace URL per target |
-   | `llm_endpoint` | Model Serving endpoint the agents call |
+   | `llm_endpoint` | Model Serving endpoint the agent calls |
 
    `python3 scripts/init_project.py --check` lists anything still unset; `make deploy` refuses to
    run until everything is set.
@@ -82,9 +94,8 @@ and CI/CD for GitHub Actions and GitLab.
    `databricks auth login --host <dev-host> --profile claims-dev`. Every command that talks to a
    workspace takes `PROFILE=` explicitly; nothing uses the default profile, and each target pins its
    host, so a profile for the wrong workspace fails instead of deploying there.
-4. **Choose the model endpoint**: `databricks serving-endpoints list --profile <profile>`. If the
-   engagement has no LLM use case, remove the `llm-endpoint` and `experiment` resources from
-   `resources/app.app.yml` and the matching entries in `app.yaml`.
+4. **Choose the model endpoint**: `databricks serving-endpoints list --profile <profile>`. Until it is
+   available, deploy with the fake agent (uncomment `AGENT_RUNNER: fake` in `app.yaml`).
 5. **Secrets.** None are needed to start: the app reaches Lakebase and Model Serving as its own
    service principal. For third-party credentials, create a secret scope and add a `secret` app
    resource (example in `resources/app.app.yml`). Never commit `.env`.
@@ -97,67 +108,104 @@ and CI/CD for GitHub Actions and GitLab.
 8. **Grant roles**: an admin opens *Users & roles* in the app. Who can open the app at all is
    controlled by the `app_users_group` bundle variable (default: `users`).
 9. **Set up CI/CD** (below) for test and prod.
-10. **Replace the sample**: `notes` (model, routes, page, tests) shows the full round trip. Rename or
-    delete it once your own feature exists.
+10. **Replace the sample.** The `brief` document type shows the whole loop. Model your domain in
+    `contracts/field-catalog.yaml` first (docs: *Adding a document type*), agree changes to the
+    contract in `contracts/agent-api-contract.md`, then build app and agent in parallel.
 
 ## Everyday commands
 
 | Command | What it does |
 | --- | --- |
-| `make dev` | API with auto-reload on :8000 and Vite on :5173, against a local Postgres. Optional `PROFILE=` and `LLM_ENDPOINT=` to use the agent |
+| `make dev` | API with auto-reload on :8000 and Vite on :5173, against a local Postgres, with the fake agent in-process. `LLM_ENDPOINT=` and `PROFILE=` switch to the real agent |
+| `make agent` | the agent on its own on :9000; then `make dev` with `AGENT_TRANSPORT=http AGENT_API_BASE=http://localhost:9000` |
 | `make lint` / `make fmt` | ruff, mypy, ESLint, Prettier, tsc / auto-fix and format |
 | `make test` | pytest (real Postgres via pgserver) and Vitest |
-| `make build` | build the frontend into `backend/app/static` |
+| `make contract` | the contract tests only: golden record, catalog, runtime, boundary |
+| `make contract-live AGENT_API_BASE=` | check a running agent against the contract over HTTP |
+| `make eval DEV=1` | evaluate offline with the fake agent and the deterministic scorers |
+| `make eval PROFILE= LLM_ENDPOINT=` | evaluate the real agent with MLflow judges in that workspace |
+| `make build` | build the frontend into `backend/static` |
 | `make api-types` | regenerate `frontend/src/api/schema.d.ts` after changing API models or routes |
 | `make migration MSG="..."` | generate an Alembic migration from model changes |
+| `make docs` / `make docs-build` | serve the documentation site on :3000 / build it (fails on broken links) |
 | `make deploy TARGET= PROFILE=` | build, validate and deploy a target, then start the app |
 | `make destroy TARGET= PROFILE=` | delete a target's resources (asks to confirm; prod's database is protected) |
-| `make eval PROFILE= LLM_ENDPOINT=` | evaluate the agent with MLflow in that workspace |
-| `make lock` | update `uv.lock` and `package-lock.json` (public registry URLs only) |
+| `make lock` | update `uv.lock` and the npm lockfiles (public registry URLs only) |
 
 ## How it fits together
 
-**Identity and permissions.** Databricks Apps signs users in and passes their identity to the app in
-`X-Forwarded-*` headers (`backend/app/identity.py`). Roles are named sets of permissions defined in
-`backend/app/permissions/roles.py`; assignments are rows in Lakebase. Everyone who can open the app
-has the default role (viewer); the emails in `admin_emails` are always admins. Routes declare what
-they need with `require(Permission.X)`, and `GET /api/me` gives the UI the same permissions for
-`usePermissions()`, `<Can>` and `<RequirePermission>`. To add a permission: add it to `Permission`,
-give it to roles, check it in a route, then run `make api-types`.
+The documentation site (`make docs`) covers each part in depth; the ADRs explain the decisions.
+
+**The handoff.** `POST /api/documents/{id}/agent-runs` (`generate`, `enhance_field` or
+`assistant_turn`) checks permissions, builds the full request from Lakebase
+(`backend/services/agent_payload_builder.py`), stores it in `agent_runs` as `queued`, and submits it.
+The agent answers `accepted` at once and works in the background, recording each step.
+`GET /api/agent-runs/{id}` polls the agent while the run is in progress (lazy refresh); a background
+poller finishes runs nobody is watching. On the first `succeeded`, `backend/services/materialise.py`
+validates the output against the field catalog and writes fields, provenance, a version and audit rows
+in one transaction, guarded by `materialised_at` under `SELECT ... FOR UPDATE`. Enhance runs return a
+suggestion that only lands when the user accepts it; assistant turns append to the thread. Runs that
+fail, time out or are lost (the agent restarted) end as `failed` with a code, and notify the user.
+
+**The agent.** `backend/agents/` imports nothing from the app except `backend.contracts` (a test
+enforces it): no database, no sessions. `AGENT_TRANSPORT=inprocess` (the default) mounts it in the
+app's process and still goes through HTTP serialisation and contract validation via
+`httpx.ASGITransport`; `AGENT_TRANSPORT=http` with `AGENT_API_BASE` calls it as its own app, with the
+app's service-principal token. Each run kind has a LangChain runner (a prompt and `ChatDatabricks`
+with the output schema offered as a tool, see `structured()` in `backend/agents/runners/_common.py`:
+newer Claude models reject LangChain's forced structured output) and a fake runner; `AGENT_RUNNER` and
+`AGENT_RUNNER_OVERRIDES` pick per run kind. `FAKE_AGENT_STEP_SECONDS`, `FAKE_AGENT_FAIL_AT`,
+`FAKE_AGENT_VERSION` and `FAKE_AGENT_DRIFT` make the fake slow, failing or visibly different.
+
+**The contract.** `contracts/agent-api-contract.md` is the golden record that app and agent teams
+agree on: endpoints, envelopes, step vocabulary, error codes and JSON examples. The Pydantic models in
+`backend/contracts/agent_contract_v1.py` implement it, and `tests/contracts/` validates every example
+in the document, so the two can't drift apart. Breaking changes mean a new version (`v2`).
+
+**Identity and permissions.** Databricks Apps signs users in and passes their identity in
+`X-Forwarded-*` headers (`backend/auth/identity.py`). Roles are named sets of permissions in
+`backend/auth/roles.py`; everyone has the default role (viewer), and the emails in `admin_emails` are
+always admins. On top of that, each document has an access list: its creator is the owner and can
+share it with view or edit access. Documents you can't see answer 404; actions your access doesn't
+allow answer 403. `GET /api/me` gives the UI the same permissions for `<Can>` and
+`<RequirePermission>`.
 
 **Lakebase.** The bundle creates a Lakebase project per target with a database the app can connect
 to (`CAN_CONNECT_AND_CREATE`). The app connects as its service principal with a short-lived OAuth
-token (`backend/app/db.py`) and runs the migrations on startup under an advisory lock, so it creates
-and owns the `app` schema. Deploy before pointing a local `make dev` at Lakebase; a schema created by
-your own user would not be accessible to the app.
+token injected on each connection (`backend/db/session.py`) and runs the migrations on startup under
+an advisory lock, so it creates and owns the `app` schema. Deploy before pointing a local `make dev` at
+Lakebase; a schema created by your own user would not be accessible to the app.
 
-**Notifications.** `Notifier.notify()` writes to the in-app inbox and to any outbound channels
-(`backend/app/notifications/channels.py`). Granting a role notifies the user, as an example. The UI
-polls every 30 seconds: the Apps proxy buffers server-sent events and ends requests after 120 seconds.
+**Idempotency and notifications.** Mutating `/api` requests may send an `Idempotency-Key` header; a
+retry with the same key replays the first response instead of running twice (the UI sends one for
+creates and agent runs). `Notifier.notify()` writes to the in-app inbox and to any outbound channels;
+run results and role grants notify the user. The UI polls - every 1.5 s backing off to 10 s for a run,
+every 30 s for the bell - because the Apps proxy buffers server-sent events and ends requests after
+120 seconds.
 
-**Agents.** `backend/app/agents/` holds the agents served at `/api/agents/{name}/invoke`. The example
-assistant uses the OpenAI Agents SDK with a Databricks Model Serving endpoint; its tools run as the
-calling user and check the same permissions as the API. `agents/llm.py` adapts Databricks responses the
-SDK can't read (reasoning models can return message content as a list of parts), so keep it when
-switching models. Traces go to the target's MLflow experiment.
-Replies must arrive within the proxy's 120-second limit. Add an agent by copying `assistant.py`, adding
-a prompt in `prompts/` and registering it in `registry.py`. Keep the package inside `app`: a top-level
-`agents` package would shadow the SDK, which is also imported as `agents`.
+**Evals.** Each row of `evals/dataset.jsonl` is a contract request plus the facts a good result
+contains, run through the same runtime the app uses. `make eval DEV=1` runs offline against the fake
+agent with the deterministic scorers in `evals/scorers.py` (CI runs it as a test); `make eval` adds
+MLflow's judges against the real model. Copy a run's `request_payload` from `agent_runs` into the
+dataset to turn a real case into a test.
 
-**Evals.** `make eval` runs the assistant locally against a seeded throwaway Postgres, calls the model
-endpoint in the profile's workspace, and scores the answers with MLflow's built-in judges and the
-scorers in `evals/scorers.py`. Grow `evals/dataset.jsonl` from real questions.
-
-**Frontend.** Vite builds into `backend/app/static`, which FastAPI serves with client-side routing, so
-the UI and API share one origin and one app. The API client (`frontend/src/lib/api.ts`) is typed from
-the backend's OpenAPI schema; CI fails if the generated types are stale. Add a page in
-`frontend/src/pages/`, then register it in `routes.tsx` and `app/nav.ts`.
+**Frontend.** Vite builds into `backend/static`, which FastAPI serves with client-side routing, so the
+UI and API share one origin and one app. The API client (`frontend/src/lib/api.ts`) is typed from the
+backend's OpenAPI schema; CI fails if the generated types are stale. `useAgentRun()`
+(`frontend/src/lib/agentRuns.ts`) follows a run and refreshes the document when it finishes; runs
+still in progress come back on the document as `active_runs`, so a reload resumes them.
 
 ## CI/CD
 
-Both pipelines run ruff, mypy, pytest, ESLint, tsc, Vitest, a frontend build, a lockfile check and an
-API-types check on every change. Deploys run `make ci-deploy TARGET=<target>`: pushes to the default
-branch deploy dev; test and prod are deployed by hand (a manual job or workflow run).
+Both pipelines run, on every change:
+- ruff, mypy, pytest (including the contract tests and the offline eval), ESLint, tsc, Vitest and a
+  frontend build
+- the lockfile check and the API-types check
+- the agent on its own, checked over HTTP with `make contract-live` (the split-deployment path)
+- the documentation build
+
+Deploys run `make ci-deploy TARGET=<target>`: pushes to the default branch deploy dev; test and prod
+are deployed by hand (a manual job or workflow run).
 
 Deploys sign in as a service principal through **workload identity federation**: the pipeline's OIDC
 token is exchanged for a Databricks token, so no Databricks secret is stored in CI. For each workspace:
@@ -195,8 +243,8 @@ workflow.
 
 ## Lockfiles and package mirrors
 
-CI and Databricks Apps install from `uv.lock` and `frontend/package-lock.json`, so both must point at
-the public registries. `frontend/.npmrc` keeps registry URLs out of the npm lockfile.
+CI and Databricks Apps install from `uv.lock` and the npm lockfiles (`frontend/`, `docs/`), so they
+must point at the public registries. Each `.npmrc` keeps registry URLs out of its lockfile.
 `scripts/relock.sh` (used by `make lock`) locks through a PyPI mirror when pypi.org is unreachable and
 rewrites the mirror's URLs to public PyPI. `scripts/check_lockfiles.sh` fails CI if a mirror URL slips
 in. Set `PYPI_MIRROR` if your mirror is not the default one in the script.
@@ -207,11 +255,15 @@ in. Set `PYPI_MIRROR` if your mirror is not the default one in the script.
   Databricks Apps installs with uv and uses `requires-python`. If a workspace cannot download Python
   3.12 at deploy time (restricted egress), switch to the runtime's built-in 3.11: set
   `requires-python = ">=3.11,<3.12"` and `.python-version` to `3.11`, then run `make lock`.
+- **The agent dependencies are heavy.** `databricks-langchain` brings MLflow, LangChain and the
+  Databricks clients, which adds to install time on the first deploy. Runs are asynchronous, so model
+  latency never meets the proxy's 120-second request limit.
+- **The agent's run registry lives in memory.** A restart loses runs in progress; the app fails them
+  as `AGENT_RUN_LOST` and the user can retry. The results the app has materialised are safe in
+  Lakebase.
 - **The dev target is shared.** Development mode does not make the app or Lakebase project names
   per-user, so one person (or CI) deploys dev in a workspace.
 - **Lakebase vs. local Postgres**: Lakebase runs Postgres 17, pgserver runs 16. Avoid 17-only features
   or test them against a dev deployment.
-- **Request time limit**: the Apps proxy ends requests after 120 seconds, without an error in the app
-  logs. Keep agent turns short, or move long work to a Lakeflow job.
 - **Egress**: the app needs PyPI (or `UV_INDEX_URL`) at deploy time, and the webhook channel needs
   the webhook host.

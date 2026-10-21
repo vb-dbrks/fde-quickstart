@@ -14,17 +14,17 @@ if [[ -n "$bad_py" ]]; then
   status=1
 fi
 
-# package-lock.json: frontend/.npmrc omits registry "resolved" URLs; any that remain must be npmjs.
-lock=frontend/package-lock.json
-if [[ -f "$lock" ]]; then
+# package-lock.json: each .npmrc omits registry "resolved" URLs; any that remain must be npmjs.
+for lock in frontend/package-lock.json docs/package-lock.json; do
+  [[ -f "$lock" ]] || continue
   bad_npm=$(grep -oE '"resolved": "https?://[^"/]+' "$lock" | sed 's/"resolved": "//' | sort -u \
     | grep -vx 'https://registry.npmjs.org' || true)
   if [[ -n "$bad_npm" ]]; then
-    echo "$lock contains non-public registries (delete it and run npm install in frontend/):"
+    echo "$lock contains non-public registries (delete it and run npm install in $(dirname "$lock")/):"
     echo "$bad_npm" | sed 's/^/  /'
     status=1
   fi
-fi
+done
 
 if [[ $status -eq 0 ]]; then
   echo "lockfiles OK: public registries only"

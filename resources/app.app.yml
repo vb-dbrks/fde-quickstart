@@ -35,3 +35,30 @@ resources:
           level: CAN_USE
       lifecycle:
         started: true
+
+    # Splitting the agent into its own app (docs: "Splitting the agent into its own app"). The agent
+    # needs only the model endpoint and the experiment - no database: it is stateless. It deploys the
+    # same code; `config` replaces app.yaml's command and environment for this app. Then set
+    # AGENT_TRANSPORT=http and AGENT_API_BASE (the agent app's URL) in app.yaml, and grant this app's
+    # service principal CAN_USE on the agent app.
+    #
+    # agent:
+    #   name: "{{project_name}}-agent"
+    #   description: "{{project_title}} agent"
+    #   source_code_path: ..
+    #   config:
+    #     command: ["uv", "run", "--frozen", "python", "-m", "backend.agents"]
+    #     env:
+    #       - name: LLM_ENDPOINT
+    #         value_from: llm-endpoint
+    #       - name: MLFLOW_EXPERIMENT_ID
+    #         value_from: experiment
+    #   resources:
+    #     - name: llm-endpoint
+    #       serving_endpoint:
+    #         name: ${var.llm_endpoint}
+    #         permission: CAN_QUERY
+    #     - name: experiment
+    #       experiment:
+    #         experiment_id: ${resources.experiments.agent_traces.id}
+    #         permission: CAN_EDIT

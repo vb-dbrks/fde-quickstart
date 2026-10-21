@@ -63,6 +63,10 @@ class AgentContractError(AgentClientError):
         self.raw = raw
 
 
+def _is_local(base_url: str) -> bool:
+    return httpx.URL(base_url).host in {"localhost", "127.0.0.1", "::1"}
+
+
 class DatabricksAuth(httpx.Auth):
     """Adds a current Databricks token (the app's service principal on Databricks Apps)."""
 
@@ -94,9 +98,11 @@ class AgentClient:
     def over_http(
         cls, base_url: str, *, timeout: float, auth: httpx.Auth | None = None
     ) -> "AgentClient":
-        http = httpx.AsyncClient(
-            base_url=base_url.rstrip("/"), timeout=timeout, auth=auth or DatabricksAuth()
-        )
+        """An agent at ``base_url``. Unless ``auth`` is given, requests carry the app's Databricks
+        token - except to a local agent (`make agent`), which needs none."""
+        if auth is None:
+            auth = httpx.Auth() if _is_local(base_url) else DatabricksAuth()
+        http = httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout, auth=auth)
         return cls(http)
 
     async def aclose(self) -> None:

@@ -6,7 +6,10 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from langchain_core.runnables import Runnable
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
 
 from backend.agents.runtime import AgentRunFailed
@@ -18,9 +21,9 @@ logger = logging.getLogger(__name__)
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 # Bump when a prompt changes, so traces and outputs say which prompt produced them.
 PROMPT_VERSIONS = {
-    "generate": "generate@1",
-    "enhance_field": "enhance_field@1",
-    "assistant_turn": "assistant_turn@1",
+    "generate": "generate@2",
+    "enhance_field": "enhance_field@2",
+    "assistant_turn": "assistant_turn@2",
 }
 
 
@@ -74,6 +77,74 @@ def shape_value(spec: FieldSpec, value: str | list[str]) -> str | list[str]:
         return "\n".join(value) if isinstance(value, list) else value
     if isinstance(value, str):
         return [line.lstrip("-* ").strip() for line in value.splitlines() if line.strip()]
+    return value
+
+
+def structured[SchemaT: BaseModel](
+    model: BaseChatModel, schema: type[SchemaT]
+) -> Runnable[Any, SchemaT]:
+    """The model's answer as ``schema``, from a tool call the model is asked - not forced - to make.
+
+    ``with_structured_output()`` forces the tool call or sends ``response_format``, and newer Anthropic
+    models on Databricks reject both (400 BAD_REQUEST). So the schema is bound as a tool with
+    ``tool_choice="auto"``, the prompts tell the model to call it, and the reply is parsed leniently.
+    A reply that still doesn't parse (now and then the model mangles nested JSON) is asked for once
+    more.
+    """
+    name = convert_to_openai_tool(schema)["function"]["name"]
+
+    def parse(message: AIMessage) -> SchemaT:
+        return parse_structured(message, schema, tool_name=name)
+
+    chain = model.bind_tools([schema], tool_choice="auto") | RunnableLambda(parse)
+    # ValueError covers pydantic's ValidationError and json.JSONDecodeError. Nothing to wait out: retry
+    # at once.
+    return chain.with_retry(
+        retry_if_exception_type=(ValueError,), stop_after_attempt=2, wait_exponential_jitter=False
+    )
+
+
+def parse_structured[SchemaT: BaseModel](
+    message: AIMessage, schema: type[SchemaT], *, tool_name: str
+) -> SchemaT:
+    """Validate the tool call's arguments, or a JSON object in the text if the model wrote one.
+
+    Models sometimes send nested lists and objects as JSON-encoded strings; those are decoded first.
+    """
+    for call in message.tool_calls:
+        if call["name"] == tool_name:
+            return schema.model_validate(_decode_nested_json(call["args"]))
+    text = message.text
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end < start:
+        raise ValueError(f"the model neither called {tool_name} nor returned JSON")
+    return schema.model_validate(_decode_nested_json(json.loads(text[start : end + 1])))
+
+
+def fill_missing_metadata(data: Any) -> Any:
+    """For a field's ``model_validator(mode="before")``: models now and then return a value without
+    its confidence or reasoning. Keep the value and say so, rather than failing the run. The schema
+    the model sees still marks these as required."""
+    if isinstance(data, dict):
+        defaults = {
+            "confidence": "low",
+            "confidence_reason": "The model did not give its confidence.",
+            "reasoning": "",
+        }
+        return {**defaults, **data}
+    return data
+
+
+def _decode_nested_json(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _decode_nested_json(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_decode_nested_json(item) for item in value]
+    if isinstance(value, str) and value.lstrip()[:1] in ("[", "{"):
+        try:
+            return _decode_nested_json(json.loads(value))
+        except ValueError:
+            return value  # text that merely starts with a bracket
     return value
 
 

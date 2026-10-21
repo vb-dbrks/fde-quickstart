@@ -1,4 +1,5 @@
-"""Real runners, one per run kind. Each is a LangChain chain: prompt | model.with_structured_output()."""
+"""Real runners, one per run kind. Each is a LangChain chain: prompt | model with the output schema as
+a tool (see _common.structured)."""
 
 from backend.agents.llm import ModelFactory
 from backend.agents.runners.assistant_turn import make_assistant_turn_runner

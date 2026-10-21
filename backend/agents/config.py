@@ -15,6 +15,8 @@ class AgentSettings(BaseSettings):
     agent_version: str = "0.1.0"
     # Model Serving endpoint for the real runners (e.g. a Foundation Model API endpoint).
     llm_endpoint: str | None = None
+    # Sampling temperature. Unset: the endpoint's default (some models reject the parameter).
+    llm_temperature: float | None = None
     # fake or real for every run kind. Unset: real when LLM_ENDPOINT is set, otherwise fake.
     agent_runner: RunnerChoice | None = None
     # Per run kind, e.g. "assistant_turn=real,generate=fake". Wins over AGENT_RUNNER.

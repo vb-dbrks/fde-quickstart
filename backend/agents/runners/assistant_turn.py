@@ -12,6 +12,7 @@ from backend.agents.runners._common import (
     load_prompt,
     output_meta,
     sources_payload,
+    structured,
     to_json,
 )
 from backend.agents.runtime import AgentRunFailed, RunFn, Steps
@@ -51,7 +52,7 @@ def make_assistant_turn_runner(
                 "earlier_messages_omitted": context.history_truncated,
             }
         with steps.step("composing_answer"):
-            chain = PROMPT | model().with_structured_output(AssistantReply)
+            chain = PROMPT | structured(model(), AssistantReply)
             reply = invoke(
                 chain,
                 {

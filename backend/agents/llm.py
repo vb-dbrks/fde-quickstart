@@ -13,7 +13,10 @@ from langchain_core.language_models import BaseChatModel
 ModelFactory = Callable[[], BaseChatModel]
 
 
-def chat_model_factory(endpoint: str, *, temperature: float = 0.2) -> ModelFactory:
+def chat_model_factory(endpoint: str, *, temperature: float | None = None) -> ModelFactory:
+    """``temperature=None`` leaves it to the endpoint: some models (recent Claude models among them)
+    reject the parameter outright, so only set it (LLM_TEMPERATURE) for models that accept it."""
+
     @cache
     def factory() -> BaseChatModel:
         from databricks_langchain import ChatDatabricks

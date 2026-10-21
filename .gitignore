@@ -12,6 +12,8 @@ node_modules/
 # Build output (the frontend builds into the backend; `make build`)
 backend/static/
 .build/
+docs/build/
+docs/.docusaurus/
 
 # Databricks bundle state
 .databricks/

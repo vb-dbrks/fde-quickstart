@@ -27,6 +27,7 @@ variables:
 sync:
   exclude:
     - frontend/**
+    - docs/**
     - tests/**
     - evals/**
     - scripts/**

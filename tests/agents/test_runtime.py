@@ -2,7 +2,13 @@ from typing import Any
 
 import pytest
 
-from backend.agents.runtime import AgentRunFailed, AgentRuntime, RequestRejected, Steps
+from backend.agents.runtime import (
+    AgentRunFailed,
+    AgentRuntime,
+    InlineExecutor,
+    RequestRejected,
+    Steps,
+)
 from backend.contracts.agent_contract_v1 import (
     AgentOutput,
     AgentRunRequest,
@@ -11,7 +17,7 @@ from backend.contracts.agent_contract_v1 import (
 )
 from backend.contracts.field_catalog import load_field_catalog
 from tests.contracts.test_validation import make_request
-from tests.helpers import InlineExecutor, fake_runtime
+from tests.helpers import fake_runtime
 
 
 def runtime_with(runner: Any, **options: Any) -> AgentRuntime:

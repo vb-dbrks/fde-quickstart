@@ -3,18 +3,20 @@
 from typing import Literal
 
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.agents.llm import ModelFactory
 from backend.agents.runners._common import (
     ModelCitation,
     field_payload,
+    fill_missing_metadata,
     invoke,
     known_citations,
     load_prompt,
     output_meta,
     shape_value,
     sources_payload,
+    structured,
     to_json,
 )
 from backend.agents.runtime import AgentRunFailed, RunFn, Steps
@@ -32,6 +34,8 @@ class GeneratedField(BaseModel):
     confidence_reason: str = Field(description="One sentence: why this confidence.")
     reasoning: str = Field(description="One or two sentences: how you arrived at the value.")
     citations: list[ModelCitation] = Field(default_factory=list)
+
+    _fill_missing_metadata = model_validator(mode="before")(fill_missing_metadata)
 
 
 class GeneratedFields(BaseModel):
@@ -57,7 +61,7 @@ def make_generate_runner(
                 "sources": sources_payload(request),
             }
         with steps.step("drafting_fields"):
-            chain = PROMPT | model().with_structured_output(GeneratedFields)
+            chain = PROMPT | structured(model(), GeneratedFields)
             result = invoke(
                 chain,
                 {"instructions": load_prompt("generate"), "payload": to_json(payload)},

@@ -1,15 +1,13 @@
 """Test users, settings and agent runtimes."""
 
-from collections.abc import Callable
-from concurrent.futures import Executor, Future
-from typing import Any, ParamSpec, TypeVar
+from typing import Any
 
 import httpx
 from fastapi import FastAPI
 from pydantic_settings import SettingsConfigDict
 
 from backend.agents.config import AgentSettings
-from backend.agents.runtime import AgentRuntime
+from backend.agents.runtime import AgentRuntime, InlineExecutor
 from backend.agents.server import build_runtime, create_agent_app
 from backend.auth.principal import Principal
 from backend.auth.roles import Role, permissions_for
@@ -22,9 +20,6 @@ OTHER_EDITOR = "other.editor@example.com"
 VIEWER = "viewer@example.com"
 DEV_USER = "dev.user@example.com"
 
-P = ParamSpec("P")
-T = TypeVar("T")
-
 
 class IsolatedSettings(Settings):
     """App settings that ignore any local .env file."""
@@ -34,18 +29,6 @@ class IsolatedSettings(Settings):
 
 class IsolatedAgentSettings(AgentSettings):
     model_config = SettingsConfigDict(env_file=None, extra="ignore")
-
-
-class InlineExecutor(Executor):
-    """Runs submitted work immediately, so agent runs finish before submit returns."""
-
-    def submit(self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
-        future: Future[T] = Future()
-        try:
-            future.set_result(fn(*args, **kwargs))
-        except BaseException as exc:
-            future.set_exception(exc)
-        return future
 
 
 def fake_runtime(**overrides: Any) -> AgentRuntime:

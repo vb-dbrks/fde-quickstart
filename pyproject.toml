@@ -99,4 +99,5 @@ asyncio_default_test_loop_scope = "session"
 filterwarnings = [
     "error::DeprecationWarning:backend.*",
     "ignore::DeprecationWarning:mlflow.*",  # MLflow internals on SQLAlchemy 2.1
+    "ignore::DeprecationWarning:unitycatalog.*",  # pulled in by databricks-langchain
 ]

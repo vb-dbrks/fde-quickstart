@@ -12,3 +12,4 @@ Rules:
 - Do not invent facts, names, numbers or dates.
 - Return the value in the field's `value_type`. Write plain text without Markdown.
 - Cite a source only when the revision relies on it.
+- Answer by calling the provided tool once.

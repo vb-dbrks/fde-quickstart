@@ -298,13 +298,21 @@ Non-2xx responses carry an envelope:
 | Code | Where | Meaning |
 | --- | --- | --- |
 | `VALIDATION_ERROR` | HTTP 400 on submit | The request does not match this contract or the field catalog. |
-| `RUN_NOT_FOUND` | HTTP 404 on poll | Unknown run id — usually the agent restarted. The app fails the run as retryable. |
+| `RUN_NOT_FOUND` | HTTP 404 on poll | Unknown run id — usually the agent restarted. The app fails the run as `AGENT_RUN_LOST`; the user can start it again. |
 | `MODEL_ERROR` | `failed` status | The model endpoint failed or returned nothing usable. |
 | `OUTPUT_INVALID` | `failed` status | The agent's output broke the contract or the catalog (checked before `succeeded`). |
 | `INTERNAL_ERROR` | `failed` status | Anything else. |
 
-The app adds its own codes on `agent_runs` (never sent by the agent): `SUBMIT_FAILED`, `TIMEOUT`,
-`ORPHANED` and `MATERIALISATION_FAILED`.
+The app adds its own codes on `agent_runs` (never sent by the agent):
+
+| Code | Meaning |
+| --- | --- |
+| `SUBMIT_FAILED` | The agent could not be reached or rejected the request at submit. |
+| `ORPHANED` | The run stayed `queued` (never accepted) past the grace period. |
+| `TIMEOUT` | The run did not finish within `AGENT_RUN_TIMEOUT_SECONDS`. |
+| `AGENT_RUN_LOST` | The agent answered `RUN_NOT_FOUND` for a run it had accepted. |
+| `CONTRACT_ERROR` | A poll response did not match this contract. |
+| `MATERIALISATION_FAILED` | The output passed the agent's checks but not the app's, so nothing was written. |
 
 ## 6. Output rules
 
