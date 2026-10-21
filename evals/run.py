@@ -62,11 +62,17 @@ def make_predict(runtime: AgentRuntime) -> Predict:
 
 def evaluate_offline(rows: list[dict[str, Any]]) -> int:
     """Run the fake agent and the deterministic scorers; return the number of failed checks."""
+    # Pinned, and no .env: a developer's local overrides must not change what is evaluated.
     settings = AgentSettings(
+        _env_file=None,
         agent_runner="fake",
+        agent_runner_overrides="",
         llm_endpoint=None,
         fake_agent_step_seconds=0,
+        fake_agent_fail_at=None,
+        fake_agent_drift="",
         mlflow_experiment_id=None,
+        databricks_app_name=None,
     )
     predict = make_predict(build_runtime(settings, executor=InlineExecutor()))
     failures = 0
@@ -99,7 +105,13 @@ def evaluate_with_mlflow(
     mlflow.set_experiment(experiment or f"/Users/{user}/agent-evals")
     mlflow.langchain.autolog()
 
-    settings = AgentSettings(agent_runner="real", llm_endpoint=endpoint, mlflow_experiment_id=None)
+    settings = AgentSettings(
+        _env_file=None,
+        agent_runner="real",
+        agent_runner_overrides="",
+        llm_endpoint=endpoint,
+        mlflow_experiment_id=None,
+    )
     # Inline: the model calls run in predict's thread, so they nest under the evaluation's trace.
     runtime = build_runtime(settings, executor=InlineExecutor())
     results = mlflow.genai.evaluate(

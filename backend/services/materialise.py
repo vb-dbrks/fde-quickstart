@@ -11,7 +11,9 @@ Runs inside the caller's transaction (no commit here), with the agent_runs row l
 
 from datetime import UTC, datetime
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from backend.contracts.agent_contract_v1 import AgentOutput, AgentRunRequest
 from backend.contracts.field_catalog import FieldCatalog
@@ -80,12 +82,22 @@ async def materialise_generate(
             )
         )
 
-    document.current_version += 1
-    document.updated_at = datetime.now(UTC)
+    # In SQL, not Python: two runs materialising into the same document at once must each get their
+    # own version number, whatever their copy of the document says.
+    now = datetime.now(UTC)
+    version = await db.scalar(
+        update(Document)
+        .where(Document.id == document.id)
+        .values(current_version=Document.current_version + 1, updated_at=now)
+        .returning(Document.current_version)
+        .execution_options(synchronize_session=False)
+    )
+    set_committed_value(document, "current_version", version)
+    set_committed_value(document, "updated_at", now)
     db.add(
         DocumentVersion(
             document_id=document.id,
-            version=document.current_version,
+            version=version,
             snapshot=field_values(rows),
             agent_run_id=run.id,
             created_by=actor,

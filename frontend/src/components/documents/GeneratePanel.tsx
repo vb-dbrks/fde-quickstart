@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { DocumentDetail, DocumentSummary } from "@/lib/api";
+import { keyed, type DocumentDetail, type DocumentSummary } from "@/lib/api";
 import { isTerminal, useAgentRun } from "@/lib/agentRuns";
 import { useStartAgentRun } from "@/lib/queries";
 
@@ -56,11 +56,11 @@ export function GeneratePanel({
   function generate(event: FormEvent) {
     event.preventDefault();
     start.mutate(
-      {
+      keyed({
         run_kind: "generate",
         instruction: instruction.trim() || null,
         source_document_ids: sources,
-      },
+      }),
       { onSuccess: (started) => setRunId(started.id), onError: (e) => toast.error(e.message) },
     );
   }

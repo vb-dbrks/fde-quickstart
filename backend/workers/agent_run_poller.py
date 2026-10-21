@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.domain.enums import RunStatus
+from backend.domain.enums import ACTIVE_RUN_STATUSES
 from backend.domain.models import AgentRun
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 Refresh = Callable[[AsyncSession, str], Awaitable[object]]
 BATCH_SIZE = 50
 MIN_INTERVAL = timedelta(seconds=3)
-_ACTIVE = (RunStatus.QUEUED.value, RunStatus.ACCEPTED.value, RunStatus.RUNNING.value)
 
 
 class AgentRunPoller:
@@ -52,7 +51,7 @@ class AgentRunPoller:
                 await db.scalars(
                     select(AgentRun.id)
                     .where(
-                        AgentRun.status.in_(_ACTIVE),
+                        AgentRun.status.in_(ACTIVE_RUN_STATUSES),
                         or_(
                             AgentRun.last_polled_at.is_(None), AgentRun.last_polled_at < due_before
                         ),

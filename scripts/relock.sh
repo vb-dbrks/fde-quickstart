@@ -2,21 +2,22 @@
 # Re-lock uv.lock so every URL in it points at public PyPI.
 #
 # CI and Databricks Apps install from the lockfile, so it must only contain public URLs. Where pypi.org
-# is not reachable and packages come from a PyPI mirror, this resolves through the mirror (PYPI_MIRROR,
-# defaulting to the Databricks package proxy) and rewrites the mirror URLs to their public equivalents.
-# The mirror serves the same file paths, sizes and hashes, so only the host changes.
+# is not reachable and packages come from a PyPI mirror (a corporate proxy), set PYPI_MIRROR to the
+# mirror's simple index, e.g. https://pypi-mirror.example.com/simple: this resolves through it and
+# rewrites the mirror URLs to their public equivalents. The mirror serves the same file paths, sizes
+# and hashes, so only the host changes.
 #
-# Usage: scripts/relock.sh [extra `uv lock` args, e.g. --upgrade-package fastapi]
+# Usage: [PYPI_MIRROR=<url>] scripts/relock.sh [extra `uv lock` args, e.g. --upgrade-package fastapi]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PUBLIC_INDEX="https://pypi.org/simple"
 PUBLIC_FILES="https://files.pythonhosted.org/packages/"
-DEFAULT_MIRROR="https://pypi-proxy.cloud.databricks.com/simple"
 
 mirror="${PYPI_MIRROR:-}"
 if [[ -z "$mirror" ]] && ! curl -sfI -m 5 "$PUBLIC_INDEX/pip/" >/dev/null 2>&1; then
-  mirror="$DEFAULT_MIRROR"
+  echo "pypi.org is not reachable. Set PYPI_MIRROR to your PyPI mirror's simple index and re-run." >&2
+  exit 1
 fi
 
 # Index settings from the environment or uv.toml would leak into the lockfile; ignore them.

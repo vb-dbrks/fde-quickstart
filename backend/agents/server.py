@@ -35,6 +35,7 @@ def build_runtime(
 ) -> AgentRuntime:
     """Pick fake or real runners per run kind (AGENT_RUNNER / AGENT_RUNNER_OVERRIDES)."""
     settings = settings or AgentSettings()
+    settings.check()
     catalog = load_field_catalog()
     fake = FakeAgent(
         catalog,

@@ -20,14 +20,34 @@ def test_an_endpoint_makes_the_real_runners_the_default() -> None:
 def test_overrides_pick_runners_per_run_kind() -> None:
     settings = IsolatedAgentSettings(
         llm_endpoint="my-endpoint",
-        agent_runner="fake",
-        agent_runner_overrides="assistant_turn=real, generate = fake",
+        agent_runner="real",
+        agent_runner_overrides="assistant_turn=fake, generate = fake ",  # spaces around keys
     )
     assert settings.runner_choices() == {
         "generate": "fake",
-        "enhance_field": "fake",
-        "assistant_turn": "real",
+        "enhance_field": "real",
+        "assistant_turn": "fake",
     }
+
+
+def test_overrides_must_name_real_run_kinds() -> None:
+    settings = IsolatedAgentSettings(agent_runner="fake", agent_runner_overrides="genrate=real")
+    with pytest.raises(RuntimeError, match="unknown run kinds: \\['genrate'\\]"):
+        build_runtime(settings, executor=InlineExecutor())
+
+
+def test_on_databricks_apps_the_fake_agent_must_be_asked_for() -> None:
+    implicit = IsolatedAgentSettings(databricks_app_name="my-app", llm_endpoint=None)
+    with pytest.raises(RuntimeError, match="Set LLM_ENDPOINT, or AGENT_RUNNER=fake"):
+        build_runtime(implicit, executor=InlineExecutor())
+    explicit = IsolatedAgentSettings(
+        databricks_app_name="my-app", llm_endpoint=None, agent_runner="fake"
+    )
+    runtime = build_runtime(explicit, executor=InlineExecutor())
+    assert set(runtime.runner_names.values()) == {"fake"}
+    # Off the platform (make dev, tests) the fake stays the zero-setup default.
+    local = build_runtime(IsolatedAgentSettings(llm_endpoint=None), executor=InlineExecutor())
+    assert set(local.runner_names.values()) == {"fake"}
 
 
 def test_real_runners_need_an_endpoint() -> None:

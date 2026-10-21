@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
-import { api, unwrap, type AgentRun, type RunStatus } from "@/lib/api";
+import { api, ApiError, unwrap, type AgentRun, type RunStatus } from "@/lib/api";
 import { queryKeys } from "@/lib/queries";
 
 /**
@@ -34,8 +34,12 @@ export function useAgentRun(
     queryFn: () =>
       unwrap(api.GET("/api/agent-runs/{run_id}", { params: { path: { run_id: runId ?? "" } } })),
     enabled: Boolean(runId),
-    refetchInterval: ({ state }) =>
-      !state.data || isTerminal(state.data.status) ? false : pollDelay(state.dataUpdateCount - 1),
+    refetchInterval: ({ state }) => {
+      if (state.data && isTerminal(state.data.status)) return false;
+      // A failed poll (a blip, the app restarting) keeps polling; a run we may not see does not.
+      if (state.error instanceof ApiError && [403, 404].includes(state.error.status)) return false;
+      return pollDelay(Math.max(0, state.dataUpdateCount + state.errorUpdateCount - 1));
+    },
     refetchIntervalInBackground: true,
   });
 

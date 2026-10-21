@@ -9,11 +9,12 @@ from typing import Any
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.schema import CreateSchema
 
-from backend.db.base import APP_SCHEMA
+from backend.db.base import APP_SCHEMA, Base
+from backend.domain import models  # noqa: F401 - registers the tables for check_tables
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "alembic"
 # Arbitrary constant. Serialises migrations when several app instances start at the same time.
@@ -50,6 +51,24 @@ def upgrade_connection(connection: Connection) -> None:
     config = alembic_config()
     config.attributes["connection"] = connection
     command.upgrade(config, "head")
+    check_tables(connection)
+
+
+def check_tables(connection: Connection) -> None:
+    """Fail at startup if a table the models need is missing after migrating.
+
+    Alembic trusts the revision stamped in ``alembic_version``. A database created by another app, or
+    by an earlier template with different migrations under the same revision ids, looks up to date
+    while lacking tables - and would only fail later, on the first request that touches them.
+    """
+    expected = {t.name for t in Base.metadata.tables.values() if t.schema == APP_SCHEMA}
+    missing = sorted(expected - set(inspect(connection).get_table_names(schema=APP_SCHEMA)))
+    if missing:
+        raise RuntimeError(
+            f"The '{APP_SCHEMA}' schema is at the latest migration but is missing tables: "
+            f"{', '.join(missing)}. It was probably created by a different app or an earlier "
+            "version of this template. Point the app at a new database (or drop the schema)."
+        )
 
 
 async def upgrade(engine: AsyncEngine) -> None:

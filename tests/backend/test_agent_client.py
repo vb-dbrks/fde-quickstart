@@ -99,15 +99,37 @@ async def test_error_envelopes_keep_their_code_and_retryability() -> None:
     assert (excinfo.value.code, excinfo.value.retryable) == ("HTTP_ERROR", True)
 
 
+@pytest.mark.parametrize(
+    "body",
+    [{"error": "invalid_token"}, ["not", "an", "envelope"], {"error": {"code": None}}, None],
+)
+async def test_errors_that_are_not_envelopes_are_still_remote_errors(body: object) -> None:
+    """A proxy or sign-in layer in front of the agent answers with its own error shapes."""
+    with pytest.raises(AgentRemoteError) as excinfo:
+        await client_for(returning(httpx.Response(401, json=body))).poll("run-1")
+    assert (excinfo.value.status_code, excinfo.value.code) == (401, "HTTP_ERROR")
+
+
 async def test_responses_that_break_the_contract_are_rejected() -> None:
     broken = [
         httpx.Response(200, text="not json"),
         httpx.Response(200, json={**ACCEPTED, "status": "succeeded"}),  # succeeded without output
-        httpx.Response(200, json={**ACCEPTED, "unexpected": True}),
+        httpx.Response(200, json={**ACCEPTED, "status": "paused"}),  # not a v1 status
     ]
     for response in broken:
         with pytest.raises(AgentContractError):
             await client_for(returning(response)).poll("run-1")
+
+
+async def test_fields_from_a_newer_agent_are_ignored() -> None:
+    """v1 grows by optional fields; an older app must keep working with a newer agent."""
+    newer = {
+        **ACCEPTED,
+        "eta_seconds": 12,
+        "step_history": [{"name": "x", "status": "pending", "progress": 0.1}],
+    }
+    status = await client_for(returning(httpx.Response(200, json=newer))).poll("run-1")
+    assert status.status == "accepted"
 
 
 def returning(response: httpx.Response) -> Handler:

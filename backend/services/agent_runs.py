@@ -1,9 +1,11 @@
 """The app side of the agent handoff (ADR 0003, ADR 0004).
 
 ``start_run``   builds the full-context request, stores an ``agent_runs`` row, submits it.
-``refresh_run`` polls the agent for a non-terminal run, mirrors the status into the row and, on the
-                first ``succeeded``, materialises the output - all in one transaction with the row
-                locked, so the UI's lazy refresh and the background poller can't double-apply it.
+``refresh_run`` polls the agent for a non-terminal run, then - with the row locked and re-read -
+                mirrors the status into the row and, on the first ``succeeded``, materialises the
+                output in one transaction, so the UI's lazy refresh, the background poller and other
+                app instances can't double-apply it. No lock or connection is held while the agent
+                is called.
 
 Run kinds and what "materialise" means for each:
 
@@ -17,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.access import require_document
@@ -26,7 +28,7 @@ from backend.auth.roles import Permission
 from backend.contracts.agent_contract_v1 import AgentRunKind, AgentRunStatus
 from backend.contracts.field_catalog import FieldCatalog
 from backend.domain.enums import Access, RunStatus
-from backend.domain.errors import ForbiddenError, InvalidInputError
+from backend.domain.errors import ForbiddenError, InvalidInputError, NotFoundError
 from backend.domain.models import AgentRun, Document, Message, new_id
 from backend.services import assistant, documents
 from backend.services.agent_client import (
@@ -35,7 +37,6 @@ from backend.services.agent_client import (
     AgentContractError,
     AgentRemoteError,
     AgentRunNotFound,
-    AgentTimeoutError,
 )
 from backend.services.agent_payload_builder import build_request, render_source
 from backend.services.materialise import MaterialisationError, materialise_generate
@@ -46,8 +47,6 @@ from backend.settings import Settings
 logger = logging.getLogger(__name__)
 
 MAX_SOURCES = 5
-# A queued run (submit never got through) older than this is failed as ORPHANED.
-QUEUED_GRACE = timedelta(seconds=60)
 RUN_LABELS = {"generate": "Generate", "enhance_field": "Enhance", "assistant_turn": "Assistant"}
 
 
@@ -72,6 +71,32 @@ class RunDeps:
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def queued_grace(settings: Settings) -> timedelta:
+    """How long a run may stay ``queued`` before it is failed as ORPHANED. Longer than the slowest
+    submit (the HTTP client tries three times, each up to the request timeout), so the poller never
+    gives up on a run whose submit is still in flight."""
+    return timedelta(seconds=max(60.0, 4 * settings.agent_request_timeout_seconds))
+
+
+def visible_runs(principal: Principal) -> ColumnElement[bool]:
+    """Chat runs are private to whoever started them; other runs follow the document's access."""
+    return (AgentRun.run_kind != "assistant_turn") | (AgentRun.triggered_by == principal.email)
+
+
+async def _lock_run(db: AsyncSession, run_id: str) -> AgentRun | None:
+    """The run, locked FOR UPDATE and re-read from the database. ``populate_existing`` matters: the
+    session may already hold this run from before the lock (it keeps objects across commits), and
+    without it the lock would hand back those stale values."""
+    query = (
+        select(AgentRun)
+        .where(AgentRun.id == run_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    run: AgentRun | None = await db.scalar(query)
+    return run
 
 
 def _apply_status(run: AgentRun, status: AgentRunStatus) -> None:
@@ -187,55 +212,97 @@ async def start_run(
                 agent_run_id=run_id,
             )
         )
-    await db.commit()  # the run exists even if the submit below fails
+    # The run exists even if the submit below fails, and no transaction is open during the submit.
+    await db.commit()
 
+    status: AgentRunStatus | None = None
     try:
         status = await deps.client.submit(request)
     except AgentClientError as exc:
-        logger.warning("Submitting agent run %s failed: %s", run.id, exc)
-        _fail(run, "SUBMIT_FAILED", "The agent could not accept the run. Try again.")
-        await _notify_failure(db, deps, run, document)
+        logger.warning("Submitting agent run %s failed: %s", run_id, exc)
+    locked = await _lock_run(db, run_id)
+    assert locked is not None
+    if locked.status != RunStatus.QUEUED:
+        # The poller already gave up on it (ORPHANED) while the submit was in flight: leave it.
+        logger.warning("Run %s was %s before its submit returned", run_id, locked.status)
+    elif status is None:
+        _fail(locked, "SUBMIT_FAILED", "The agent could not accept the run. Try again.")
+        await _notify_failure(db, deps, locked, document)
     else:
-        _apply_status(run, status)
-        run.submitted_at = _now()
+        _apply_status(locked, status)
+        locked.submitted_at = _now()
     await db.commit()
-    return run
+    return locked
+
+
+@dataclass(frozen=True)
+class _PollOutcome:
+    status: AgentRunStatus | None = None
+    failure: tuple[str, str] | None = None  # (error code, message)
+
+
+async def _poll(deps: RunDeps, run_id: str) -> _PollOutcome:
+    try:
+        return _PollOutcome(status=await deps.client.poll(run_id))
+    except AgentRunNotFound:
+        return _PollOutcome(
+            failure=("AGENT_RUN_LOST", "The agent restarted and lost this run. Try again.")
+        )
+    except AgentContractError as exc:
+        return _PollOutcome(
+            failure=("CONTRACT_ERROR", f"The agent's response broke the contract: {exc}")
+        )
+    except AgentRemoteError as exc:
+        if not exc.retryable:
+            return _PollOutcome(failure=(exc.code, exc.message))
+        logger.info("Polling run %s failed, will retry: %s", run_id, exc)
+    except AgentClientError as exc:  # timeouts and anything else transient
+        logger.info("Polling run %s failed, will retry: %s", run_id, exc)
+    return _PollOutcome()
 
 
 async def refresh_run(db: AsyncSession, deps: RunDeps, run_id: str) -> AgentRun | None:
-    """Bring a run up to date with the agent. Safe to call concurrently and repeatedly."""
-    run = await db.scalar(select(AgentRun).where(AgentRun.id == run_id).with_for_update())
+    """Bring a run up to date with the agent. Safe to call concurrently and repeatedly.
+
+    1. Read the run; stop if it is already terminal.
+    2. Poll the agent with no transaction open, so no lock or pooled connection waits on it.
+    3. Lock the row, re-read it and check again - another request may have finished the run in the
+       meantime - then apply the outcome and materialise in one transaction.
+    """
+    run = await db.get(AgentRun, run_id, populate_existing=True)
     if run is None or RunStatus(run.status).terminal:
         await db.commit()
         return run
-    document = await db.get(Document, run.document_id)
-    now = _now()
+    deadline = run.created_at + timedelta(seconds=deps.settings.agent_run_timeout_seconds)
+    polled = run.status != RunStatus.QUEUED and _now() < deadline
+    outcome = _PollOutcome()
+    if polled:
+        await db.commit()
+        outcome = await _poll(deps, run_id)
 
+    run = await _lock_run(db, run_id)
+    if run is None or RunStatus(run.status).terminal:
+        await db.commit()
+        return run
+    document = await db.get(Document, run.document_id, populate_existing=True)
     if run.status == RunStatus.QUEUED:
-        if run.created_at < now - QUEUED_GRACE:
+        if run.created_at < _now() - queued_grace(deps.settings):
             _fail(run, "ORPHANED", "The run was never accepted by the agent.")
             await _notify_failure(db, deps, run, document)
         await db.commit()
         return run
-    if run.created_at < now - timedelta(seconds=deps.settings.agent_run_timeout_seconds):
+    if _now() >= deadline:
         _fail(run, "TIMEOUT", "The agent took too long.")
         await _notify_failure(db, deps, run, document)
         await db.commit()
         return run
 
-    run.last_polled_at = now
-    try:
-        status = await deps.client.poll(run.id)
-    except AgentRunNotFound:
-        _fail(run, "AGENT_RUN_LOST", "The agent restarted and lost this run. Try again.")
-    except (AgentTimeoutError, AgentRemoteError) as exc:
-        if isinstance(exc, AgentRemoteError) and not exc.retryable:
-            _fail(run, exc.code, exc.message)
-        else:
-            logger.info("Polling run %s failed, will retry: %s", run.id, exc)
-    except AgentContractError as exc:
-        _fail(run, "CONTRACT_ERROR", f"The agent's response broke the contract: {exc}")
-    else:
+    if polled:
+        run.last_polled_at = _now()
+    if outcome.failure is not None:
+        _fail(run, *outcome.failure)
+    elif outcome.status is not None:
+        status = outcome.status
         _apply_status(run, status)
         if status.status == "succeeded" and status.output is not None and document is not None:
             await _materialise(db, deps, run, document, status)
@@ -299,10 +366,8 @@ async def get_run_for(
     db: AsyncSession, principal: Principal, run_id: str
 ) -> tuple[AgentRun, Document]:
     """A run the principal may see: view access to its document; chat runs only for their owner."""
-    run = await db.get(AgentRun, run_id)
-    if run is None or (run.run_kind == "assistant_turn" and run.triggered_by != principal.email):
-        from backend.domain.errors import NotFoundError
-
+    run = await db.scalar(select(AgentRun).where(AgentRun.id == run_id, visible_runs(principal)))
+    if run is None:
         raise NotFoundError("Run not found")
     document, _ = await require_document(db, principal, run.document_id, Access.VIEW)
     return run, document
@@ -311,12 +376,11 @@ async def get_run_for(
 async def recent_runs(db: AsyncSession, principal: Principal, document_id: str) -> list[AgentRun]:
     query = (
         select(AgentRun)
-        .where(AgentRun.document_id == document_id)
+        .where(AgentRun.document_id == document_id, visible_runs(principal))
         .order_by(AgentRun.created_at.desc())
         .limit(20)
     )
-    runs = (await db.scalars(query)).all()
-    return [r for r in runs if r.run_kind != "assistant_turn" or r.triggered_by == principal.email]
+    return list((await db.scalars(query)).all())
 
 
 def run_kind(value: str) -> AgentRunKind:

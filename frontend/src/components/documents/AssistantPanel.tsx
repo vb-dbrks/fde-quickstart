@@ -1,5 +1,5 @@
 import { Bot, MessageSquarePlus, Send } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import type { AgentRun } from "@/lib/api";
+import { keyed, type AgentRun } from "@/lib/api";
 import { isTerminal, useAgentRun } from "@/lib/agentRuns";
 import { formatDateTime } from "@/lib/format";
 import { useCreateThread, useMessages, useStartAgentRun, useThreads } from "@/lib/queries";
@@ -116,24 +116,28 @@ function Conversation({
   }).data;
   // Only show the run in the conversation it belongs to.
   const run = tracked && tracked.thread_id === threadId ? tracked : undefined;
-  const thinking = start.isPending || (run !== undefined && !isTerminal(run.status));
+  const thinking =
+    createThread.isPending || start.isPending || (run !== undefined && !isTerminal(run.status));
+  // Set synchronously, so a second Enter before React re-renders can't start a second thread.
+  const sending = useRef(false);
 
   async function send(event: FormEvent) {
     event.preventDefault();
     const text = message.trim();
-    if (!text || thinking) return;
+    if (!text || thinking || sending.current) return;
+    sending.current = true;
     try {
       const thread = threadId ?? (await createThread.mutateAsync(undefined)).id;
       if (!threadId) onThreadCreated(thread);
-      const started = await start.mutateAsync({
-        run_kind: "assistant_turn",
-        thread_id: thread,
-        message: text,
-      });
+      const started = await start.mutateAsync(
+        keyed({ run_kind: "assistant_turn", thread_id: thread, message: text }),
+      );
       setMessage("");
       onRunStarted(started.id);
     } catch (error) {
       toast.error((error as Error).message);
+    } finally {
+      sending.current = false;
     }
   }
 

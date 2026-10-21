@@ -1,7 +1,7 @@
 import httpx
 
 from tests.conftest import create_brief
-from tests.helpers import EDITOR, OTHER_EDITOR, VIEWER, as_user
+from tests.helpers import ADMIN, EDITOR, OTHER_EDITOR, VIEWER, as_user
 
 
 async def share(
@@ -50,6 +50,15 @@ async def test_only_owners_share(client: httpx.AsyncClient, editor: str) -> None
         (EDITOR, "owner"),
         (OTHER_EDITOR, "edit"),
     }
+
+
+async def test_the_last_owner_cannot_be_downgraded(client: httpx.AsyncClient, editor: str) -> None:
+    """Admins act as owners without being on the access list, so they could otherwise demote the
+    only listed owner."""
+    document = await create_brief(client)
+    assert await share(client, document["id"], EDITOR, "view", by=ADMIN) == 409
+    assert await share(client, document["id"], OTHER_EDITOR, "owner") == 200
+    assert await share(client, document["id"], EDITOR, "view", by=ADMIN) == 200  # one owner left
 
 
 async def test_the_last_owner_cannot_be_removed(client: httpx.AsyncClient, editor: str) -> None:

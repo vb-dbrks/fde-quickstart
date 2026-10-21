@@ -165,7 +165,10 @@ class Message(Base):
 
 
 class IdempotencyKey(Base):
-    """The stored response to a mutating request sent with an ``Idempotency-Key`` header."""
+    """A mutating request sent with an ``Idempotency-Key`` header, and its stored response.
+
+    ``status_code`` is null while the request is still running (the key is claimed but unanswered).
+    """
 
     __tablename__ = "idempotency_keys"
 
@@ -173,7 +176,7 @@ class IdempotencyKey(Base):
     principal: Mapped[str] = mapped_column(String(EMAIL_LENGTH), primary_key=True)
     method: Mapped[str] = mapped_column(String(10))
     path: Mapped[str] = mapped_column(String(500))
-    status_code: Mapped[int] = mapped_column(Integer)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_body: Mapped[Any] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

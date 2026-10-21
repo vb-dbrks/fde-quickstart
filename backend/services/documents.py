@@ -285,6 +285,10 @@ async def share(
     email = email.strip().lower()
     if email == principal.email and access != Access.OWNER:
         raise InvalidInputError("You can't lower your own access")
+    if access != Access.OWNER:
+        owners = [row for row in await list_access(db, document.id) if row.access == Access.OWNER]
+        if [row.principal for row in owners] == [email]:
+            raise ConflictError("A document needs at least one owner")
     values = {"access": access.value, "granted_by": principal.email}
     await db.execute(
         insert(DocumentAccess)

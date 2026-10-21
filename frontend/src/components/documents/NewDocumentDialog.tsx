@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
+import { fromText, isEmpty } from "@/components/documents/values";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { DocumentType } from "@/lib/api";
+import { keyed, type DocumentType } from "@/lib/api";
 import { useCreateDocument } from "@/lib/queries";
 
 /**
@@ -33,22 +34,20 @@ export function NewDocumentDialog({ documentType }: { documentType: DocumentType
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    // Each value takes its field's catalog type: list fields become arrays (one item per line).
     const fields = Object.fromEntries(
-      Object.entries(values)
-        .map(([path, value]) => [path, value.trim()])
-        .filter(([, value]) => value),
+      userFields
+        .map((field) => [field.field_path, fromText(field.type, values[field.field_path] ?? "")])
+        .filter(([, value]) => !isEmpty(value)),
     );
-    create.mutate(
-      { document_type: documentType.name, fields },
-      {
-        onSuccess: (document) => {
-          setOpen(false);
-          setValues({});
-          navigate(`/documents/${document.id}`);
-        },
-        onError: (error) => toast.error(error.message),
+    create.mutate(keyed({ document_type: documentType.name, fields }), {
+      onSuccess: (document) => {
+        setOpen(false);
+        setValues({});
+        navigate(`/documents/${document.id}`);
       },
-    );
+      onError: (error) => toast.error(error.message),
+    });
   }
 
   return (
@@ -79,7 +78,10 @@ export function NewDocumentDialog({ documentType }: { documentType: DocumentType
                 {field.field_path.endsWith(".title") ? (
                   <Input {...props} maxLength={200} />
                 ) : (
-                  <Textarea {...props} rows={3} />
+                  <Textarea {...props} rows={field.type === "list" ? 4 : 3} />
+                )}
+                {field.type === "list" && (
+                  <p className="text-xs text-muted-foreground">One item per line.</p>
                 )}
                 <p className="text-xs text-muted-foreground">{field.description}</p>
               </div>

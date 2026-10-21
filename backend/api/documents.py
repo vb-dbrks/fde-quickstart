@@ -5,7 +5,7 @@ from backend.api.deps import CatalogDep, SessionDep
 from backend.api.presenters import document_out, document_summary, field_out
 from backend.auth.access import require_document
 from backend.auth.deps import CurrentPrincipal
-from backend.domain.enums import Access, RunStatus
+from backend.domain.enums import ACTIVE_RUN_STATUSES, Access
 from backend.domain.errors import NotFoundError
 from backend.domain.models import AgentRun
 from backend.domain.schemas import (
@@ -22,10 +22,9 @@ from backend.domain.schemas import (
     VersionOut,
 )
 from backend.services import documents
+from backend.services.agent_runs import visible_runs
 
 router = APIRouter(tags=["documents"])
-
-_ACTIVE = (RunStatus.QUEUED.value, RunStatus.ACCEPTED.value, RunStatus.RUNNING.value)
 
 
 @router.get("/document-types")
@@ -68,9 +67,10 @@ async def _document_out(
     active = (
         await db.scalars(
             select(AgentRun)
-            .where(AgentRun.document_id == document.id, AgentRun.status.in_(_ACTIVE))
             .where(
-                (AgentRun.run_kind != "assistant_turn") | (AgentRun.triggered_by == principal.email)
+                AgentRun.document_id == document.id,
+                AgentRun.status.in_(ACTIVE_RUN_STATUSES),
+                visible_runs(principal),
             )
             .order_by(AgentRun.created_at)
         )

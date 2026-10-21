@@ -44,7 +44,9 @@ MAX_SOURCE_TEXT = 20_000
 
 
 class _ContractModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # Unknown fields are ignored, not rejected: v1 grows by optional fields (section 7 of the golden
+    # record), and the app and a separately deployed agent may be a release apart.
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
 
 # ---------- request -------------------------------------------------------------------------------

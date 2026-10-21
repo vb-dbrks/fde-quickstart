@@ -329,6 +329,7 @@ materialising.
 
 - v1 accepts additive, optional fields. Anything else — renaming, removing, making a field required,
   changing a type — is v2, served side by side until the app has moved.
+- Both sides ignore fields they don't know, so either can ship a new optional field first.
 - A change updates this document, `backend/contracts/agent_contract_v1.py` and the fake runner in the
   same pull request.
 

@@ -85,7 +85,8 @@ function Workspace({ document }: { document: DocumentDetail }) {
           <TabsTrigger value="assistant">Assistant</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
-        <TabsContent value="fields" className="space-y-4">
+        {/* Kept mounted while hidden, so runs in progress keep their state across tab switches. */}
+        <TabsContent value="fields" forceMount className="space-y-4 data-[state=inactive]:hidden">
           {canEdit && canRunAgent && (
             <GeneratePanel
               document={document}
@@ -107,7 +108,7 @@ function Workspace({ document }: { document: DocumentDetail }) {
             ))}
           </div>
         </TabsContent>
-        <TabsContent value="assistant">
+        <TabsContent value="assistant" forceMount className="data-[state=inactive]:hidden">
           <AssistantPanel
             documentId={document.id}
             canChat={canRunAgent}

@@ -73,7 +73,23 @@ function describeError(error: unknown, response: Response): string {
   return `${response.status} ${response.statusText}`.trim();
 }
 
-/** A fresh key per user action, so a retried request (double click, flaky network) runs once. */
-export function idempotencyKey(): string {
-  return crypto.randomUUID();
+/**
+ * A request body plus the Idempotency-Key for one user action. Create it once, when the user acts,
+ * and pass it as the mutation's variables: TanStack Query hands the same variables to every retry,
+ * so a retry after a dropped connection sends the same key and the server runs the action once.
+ */
+export type Keyed<T> = { body: T; key: string };
+
+export function keyed<T>(body: T): Keyed<T> {
+  return { body, key: crypto.randomUUID() };
 }
+
+/**
+ * Mutation retry policy: retry only when the request may never have reached the server (a network
+ * error), and only twice. An ApiError means the server answered, so repeating would not help.
+ */
+export function retryNetworkErrors(failureCount: number, error: Error): boolean {
+  return failureCount < 2 && !(error instanceof ApiError);
+}
+
+export const RETRY_DELAY_MS = 500;

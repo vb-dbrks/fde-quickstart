@@ -21,6 +21,10 @@ class RunStatus(StrEnum):
         return self in (RunStatus.SUCCEEDED, RunStatus.FAILED)
 
 
+# Runs still in progress: the poller sweeps them and the UI resumes watching them.
+ACTIVE_RUN_STATUSES = (RunStatus.QUEUED.value, RunStatus.ACCEPTED.value, RunStatus.RUNNING.value)
+
+
 class Access(StrEnum):
     """Per-document access, from least to most."""
 

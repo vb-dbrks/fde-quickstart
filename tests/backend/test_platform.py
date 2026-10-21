@@ -1,22 +1,25 @@
 """Health, SPA serving, identity, roles, notifications, idempotency and migrations."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from fastapi import FastAPI, HTTPException
-from sqlalchemy import Connection
+from sqlalchemy import Connection, text, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from starlette.requests import Request
 
 from backend.auth.identity import identity_from_request
 from backend.auth.roles import Permission, Role, permissions_for
 from backend.db import migrations
 from backend.db.base import Base
-from backend.domain import models  # noqa: F401 - registers the tables
+from backend.domain.models import IdempotencyKey
 from backend.settings import Settings
-from tests.conftest import grant
+from tests.conftest import create_brief, grant
 from tests.helpers import ADMIN, DEV_USER, EDITOR, VIEWER, IsolatedSettings, as_user
 
 
@@ -135,6 +138,38 @@ async def test_failed_requests_are_not_stored(client: httpx.AsyncClient) -> None
     assert (await client.post("/api/documents", json=body, headers=headers)).status_code == 201
 
 
+async def test_a_key_still_in_use_is_answered_409(
+    client: httpx.AsyncClient, editor: str, sessions: async_sessionmaker[AsyncSession]
+) -> None:
+    """The key is claimed before the request runs, so a concurrent repeat can't run it again."""
+    async with sessions() as db:  # a request with this key is running right now
+        db.add(IdempotencyKey(key="busy", principal=editor, method="POST", path="/api/documents"))
+        await db.commit()
+    headers = {**as_user(editor), "Idempotency-Key": "busy"}
+    body = {"document_type": "brief", "fields": {"brief.title": "x", "brief.goal": "y"}}
+    busy = await client.post("/api/documents", json=body, headers=headers)
+    assert (busy.status_code, busy.headers["Retry-After"]) == (409, "2")
+
+    async with sessions() as db:  # ...or it crashed long ago: its claim expires
+        await db.execute(
+            update(IdempotencyKey).values(created_at=datetime.now(UTC) - timedelta(minutes=10))
+        )
+        await db.commit()
+    assert (await client.post("/api/documents", json=body, headers=headers)).status_code == 201
+
+
+async def test_no_content_responses_replay_without_a_body(
+    client: httpx.AsyncClient, editor: str
+) -> None:
+    document = await create_brief(client)
+    headers = {**as_user(editor), "Idempotency-Key": "delete-once"}
+    first = await client.delete(f"/api/documents/{document['id']}", headers=headers)
+    again = await client.delete(f"/api/documents/{document['id']}", headers=headers)
+    assert first.status_code == again.status_code == 204
+    assert again.headers["Idempotent-Replayed"] == "true"
+    assert again.content == b""
+
+
 # ---- migrations ------------------------------------------------------------------------------
 
 
@@ -157,5 +192,32 @@ async def test_upgrading_twice_is_a_no_op(app: FastAPI) -> None:
         context = MigrationContext.configure(connection, opts=migrations.context_options())
         return context.get_current_revision()
 
+    head = ScriptDirectory.from_config(migrations.alembic_config()).get_current_head()
     async with app.state.engine.connect() as connection:
-        assert await connection.run_sync(current) == "0001"
+        assert await connection.run_sync(current) == head
+
+
+async def test_a_database_from_another_schema_fails_at_startup(app: FastAPI) -> None:
+    """A database stamped with a known revision but lacking the tables (e.g. made by an earlier
+    template with different migrations under the same ids) must fail loudly, not on first use."""
+    async with app.state.engine.connect() as connection:
+        await connection.execution_options(isolation_level="AUTOCOMMIT")
+        await connection.execute(text("DROP DATABASE IF EXISTS stale_app"))
+        await connection.execute(text("CREATE DATABASE stale_app"))
+    url = app.state.engine.url.set(database="stale_app")
+    stale = create_async_engine(url)
+    try:
+        async with stale.begin() as connection:
+            await connection.execute(text("CREATE SCHEMA app"))
+            await connection.execute(text("CREATE TABLE app.notes (id int primary key)"))
+            await connection.execute(
+                text("CREATE TABLE app.alembic_version (version_num varchar(32) primary key)")
+            )
+            head = ScriptDirectory.from_config(migrations.alembic_config()).get_current_head()
+            await connection.execute(
+                text("INSERT INTO app.alembic_version VALUES (:head)"), {"head": head}
+            )
+        with pytest.raises(RuntimeError, match="missing tables: agent_runs, audit_log"):
+            await migrations.upgrade(stale)
+    finally:
+        await stale.dispose()

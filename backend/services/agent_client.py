@@ -142,9 +142,14 @@ class AgentClient:
     def _raise_for_error(response: httpx.Response) -> None:
         if response.status_code < 400:
             return
+        # The contract's envelope is {"error": {"code", "message", "retryable"}}; anything in front of
+        # the agent (a proxy, the sign-in layer) may answer with other shapes, which are not envelopes.
         try:
-            error = (response.json() or {}).get("error") or {}
+            body = response.json()
         except ValueError:
+            body = None
+        error = body.get("error") if isinstance(body, dict) else None
+        if not isinstance(error, dict):
             error = {}
         code = str(error.get("code") or "HTTP_ERROR")
         message = str(error.get("message") or response.text or response.reason_phrase)

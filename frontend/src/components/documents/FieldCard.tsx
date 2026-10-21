@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { AgentRun, DocumentField } from "@/lib/api";
+import { keyed, type AgentRun, type DocumentField } from "@/lib/api";
 import { isTerminal, useAgentRun } from "@/lib/agentRuns";
 import { useStartAgentRun, useUpdateField } from "@/lib/queries";
 
@@ -172,11 +172,11 @@ function EnhanceField({
   function suggest(event: FormEvent) {
     event.preventDefault();
     start.mutate(
-      {
+      keyed({
         run_kind: "enhance_field",
         field_path: field.field_path,
         instruction: instruction.trim() || null,
-      },
+      }),
       { onSuccess: (started) => onStarted(started.id), onError: (e) => toast.error(e.message) },
     );
   }

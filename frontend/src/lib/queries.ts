@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   api,
-  idempotencyKey,
+  RETRY_DELAY_MS,
+  retryNetworkErrors,
   unwrap,
   type Access,
   type AgentRun,
   type AgentRunCreate,
+  type Keyed,
   type Role,
 } from "@/lib/api";
 
@@ -75,10 +77,13 @@ export function useDocument(documentId: string) {
 export function useCreateDocument() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { document_type: string; fields: Record<string, unknown> }) =>
-      unwrap(
-        api.POST("/api/documents", { body, headers: { "Idempotency-Key": idempotencyKey() } }),
-      ),
+    mutationFn: ({
+      body,
+      key,
+    }: Keyed<{ document_type: string; fields: Record<string, unknown> }>) =>
+      unwrap(api.POST("/api/documents", { body, headers: { "Idempotency-Key": key } })),
+    retry: retryNetworkErrors,
+    retryDelay: RETRY_DELAY_MS,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.documents }),
   });
 }
@@ -205,19 +210,20 @@ export function useUnshareDocument(documentId: string) {
 export function useStartAgentRun(documentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: AgentRunCreate) =>
+    mutationFn: ({ body, key }: Keyed<AgentRunCreate>) =>
       unwrap(
         api.POST("/api/documents/{document_id}/agent-runs", {
-          params: {
-            path: { document_id: documentId },
-            header: { "Idempotency-Key": idempotencyKey() },
-          },
+          params: { path: { document_id: documentId }, header: { "Idempotency-Key": key } },
           body,
         }),
       ),
+    retry: retryNetworkErrors,
+    retryDelay: RETRY_DELAY_MS,
     onSuccess: (run: AgentRun) => {
       queryClient.setQueryData(queryKeys.agentRun(run.id), run);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.runs(documentId) });
+      // Refresh the document too: its active_runs then include this run, so the panels resume it
+      // after a remount or a reload.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.document(documentId) });
       // The user's chat message is stored when the run starts.
       if (run.thread_id) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.messages(run.thread_id) });

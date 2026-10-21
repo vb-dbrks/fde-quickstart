@@ -44,6 +44,21 @@ def test_every_example_is_classified() -> None:
         assert "document_context" in example or "status" in example or set(example) == {"error"}
 
 
+def test_examples_use_only_fields_the_models_know() -> None:
+    """The models ignore unknown fields (tolerant reader), so a typo in an example would otherwise
+    go unnoticed: every example must survive a round trip unchanged."""
+    for example in examples():
+        model: type[AgentRunRequest | AgentRunStatus | AgentErrorEnvelope]
+        if "document_context" in example:
+            model = AgentRunRequest
+        elif "status" in example:
+            model = AgentRunStatus
+        else:
+            model = AgentErrorEnvelope
+        parsed = model.model_validate(example)
+        assert parsed.model_dump(mode="json", exclude_unset=True) == example
+
+
 def test_requests_cover_every_run_kind() -> None:
     assert {r.run_kind for r in requests().values()} == set(STEP_VOCABULARY)
 

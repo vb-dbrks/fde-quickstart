@@ -232,4 +232,77 @@ describe("document workspace", () => {
       message: "What is the goal?",
     });
   });
+
+  it("keeps a run's progress when you switch tabs and back", async () => {
+    mockApi({
+      "/api/me": editor,
+      "/api/notifications": noNotifications,
+      "/api/documents": [summaryOf(makeDocument())],
+      "/api/documents/doc-1": makeDocument(),
+      "/api/documents/doc-1/versions": [],
+      "/api/documents/doc-1/audit": [],
+      "POST /api/documents/doc-1/agent-runs": Response.json(makeRun(), { status: 202 }),
+      "/api/agent-runs/run-1": makeRun({ status: "running" }), // still going
+    });
+    const user = userEvent.setup();
+    renderApp("/documents/doc-1");
+
+    await user.click(await screen.findByRole("button", { name: "Generate" }));
+    expect(await screen.findByText("Reading context")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    expect(await screen.findByText("Audit trail")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Fields" }));
+
+    expect(screen.getByText("Reading context")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Generating/ })).toBeDisabled();
+  });
+
+  it("resumes a run after a failed poll instead of giving up", async () => {
+    let polls = 0;
+    mockApi({
+      "/api/me": editor,
+      "/api/notifications": noNotifications,
+      "/api/documents": [summaryOf(makeDocument())],
+      "/api/documents/doc-1": makeDocument({ active_runs: [makeRun({ status: "running" })] }),
+      "/api/agent-runs/run-1": () =>
+        ++polls === 1
+          ? Response.json({ detail: "Service Unavailable" }, { status: 503 })
+          : makeRun({ status: "succeeded", step_history: completedSteps }),
+    });
+    renderApp("/documents/doc-1");
+
+    expect(await screen.findByText("Done", {}, POLL)).toBeVisible();
+    expect(polls).toBe(2);
+  });
+
+  it("starts one conversation when the first message is sent twice quickly", async () => {
+    const thread = {
+      id: "t-1",
+      document_id: "doc-1",
+      title: "Conversation",
+      created_at: "2026-10-21T09:00:00Z",
+    };
+    const fetchMock = mockApi({
+      "/api/me": editor,
+      "/api/notifications": noNotifications,
+      "/api/documents": [summaryOf(makeDocument())],
+      "/api/documents/doc-1": makeDocument(),
+      "/api/documents/doc-1/threads": [],
+      "POST /api/documents/doc-1/threads": Response.json(thread, { status: 201 }),
+      "/api/threads/t-1/messages": [],
+      "POST /api/documents/doc-1/agent-runs": Response.json(
+        makeRun({ run_kind: "assistant_turn", thread_id: "t-1" }),
+        { status: 202 },
+      ),
+      "/api/agent-runs/run-1": makeRun({ run_kind: "assistant_turn", thread_id: "t-1" }),
+    });
+    const user = userEvent.setup();
+    renderApp("/documents/doc-1?tab=assistant");
+
+    await user.type(await screen.findByLabelText("Message"), "Hello{Enter}{Enter}");
+    await waitFor(() =>
+      expect(requestsTo(fetchMock, "POST", "/api/documents/doc-1/agent-runs")).toHaveLength(1),
+    );
+    expect(requestsTo(fetchMock, "POST", "/api/documents/doc-1/threads")).toHaveLength(1);
+  });
 });
