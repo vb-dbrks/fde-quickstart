@@ -76,6 +76,8 @@ runtime has its own in `backend/agents/config.py`. The ones you are most likely 
 
 ## Next
 
-- Start a new project from the template: follow the checklist in the README (`make init`, profiles,
-  first deploy).
+- Start a new project from the template: follow **Make it yours** in the README (`make init`, your
+  document types, the agent's prompts, the first deploy).
+- Working with an AI coding assistant: point it at `AGENTS.md` at the repo root - the commands, the
+  rules that keep the design intact, and recipes for common changes.
 - Deploy: [Deploy and CI/CD](deploy-and-ci.md).

@@ -43,17 +43,51 @@ authenticates through environment variables and refuses to run outside CI.
 
 | | GitHub Actions | GitLab CI |
 | --- | --- | --- |
-| Checks | `.github/workflows/ci.yml`: Python (ruff, mypy, pytest), frontend (ESLint, tsc, Vitest, build), lockfiles and generated API types | `.gitlab-ci.yml`: the same jobs in the `check` stage |
+| Checks | `.github/workflows/ci.yml`: Python (ruff, mypy, pytest), frontend (ESLint, tsc, Vitest, build), lockfiles and generated API types, the agent checked over HTTP, the docs build | `.gitlab-ci.yml`: the same jobs in the `check` stage |
 | Deploy | `.github/workflows/deploy.yml`: dev on push to `main`; test and prod by running the workflow by hand | `deploy-dev` on the default branch; `deploy-test` and `deploy-prod` as manual jobs |
 | Auth | `DATABRICKS_AUTH_TYPE=github-oidc`; per environment `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID` | `DATABRICKS_AUTH_TYPE=env-oidc`; `DATABRICKS_ACCOUNT_ID`, and per environment `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID` |
 | Switch | Deploys run once the repository variable `DEPLOY_ENABLED` is `true` | Deploy jobs appear once the variable `DEPLOY_ENABLED` is `true` |
 
-The README's **CI/CD** section lists the setup steps: the service principals, their federation
-policies, and the variables. Protect prod with required reviewers (GitHub environments) or protected
-environments (GitLab).
+Until `DEPLOY_ENABLED` is set only the checks run, so a new repository's first push stays green.
+
+### Setting up deploys
+
+For each workspace:
+
+1. **A service principal for the pipeline.** Create it (account console, or
+   `databricks account service-principals create`), add it to the workspace, and allow it to create
+   apps, Lakebase projects and MLflow experiments there. The deploying principal owns what it
+   deploys.
+2. **A federation policy** for it (account admin), so the pipeline's identity token can be exchanged
+   for a Databricks token:
+
+   ```bash
+   databricks account service-principal-federation-policy create <service-principal-id> \
+     --profile <account-profile> --json '{"oidc_policy": {
+       "issuer": "https://token.actions.githubusercontent.com",
+       "audiences": ["<databricks-account-id>"],
+       "subject": "repo:<org>/<repo>:environment:prod"}}'
+   ```
+
+   - GitHub: one policy per environment (`dev`, `test`, `prod`). Repositories created after 15 July
+     2026 use numeric IDs in the subject:
+     `repo:<org>@<org-id>/<repo>@<repo-id>:environment:prod`.
+   - GitLab: issuer `https://gitlab.com` (or your GitLab URL), subject
+     `project_path:<group>/<project>:ref_type:branch:ref:main`.
+3. **The pipeline variables.**
+   - GitHub: environments `dev`, `test` and `prod` (required reviewers on `prod`), each with
+     `DATABRICKS_HOST` and `DATABRICKS_CLIENT_ID` (the service principal's application ID).
+   - GitLab: `DATABRICKS_ACCOUNT_ID`, plus `DATABRICKS_HOST` and `DATABRICKS_CLIENT_ID` scoped to the
+     `dev`, `test` and `prod` environments. Protect `prod`.
+4. **Turn deploys on** with `DEPLOY_ENABLED=true` (a repository variable on GitHub, a CI/CD variable
+   on GitLab).
+
+Without federation, use OAuth machine-to-machine credentials: store `DATABRICKS_CLIENT_SECRET` as a
+masked, protected secret and drop `DATABRICKS_AUTH_TYPE` from the pipeline.
 
 ## Lockfiles
 
 `uv.lock` and the npm lockfiles must reference only the public registries, or CI and Databricks Apps
-deploys fail. `scripts/check_lockfiles.sh` checks this in CI; `make lock` updates them safely on a
-machine that uses a package mirror.
+deploys fail. `scripts/check_lockfiles.sh` checks this in CI. `make lock` updates them; on a machine
+where pypi.org is blocked, set `PYPI_MIRROR` to your mirror's simple index first, and the script
+rewrites the mirror's URLs to public PyPI.
