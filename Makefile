@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-export PYTHONPATH := backend
+export PYTHONPATH := .
 export MLFLOW_DISABLE_AGENT_HINT := 1
 
 UV_RUN := uv run --frozen --all-groups
@@ -48,7 +48,7 @@ test: ## Python tests against real Postgres (pgserver) and frontend tests
 	$(UV_RUN) pytest
 	$(NPM) test
 
-build: ## Build the frontend into backend/app/static
+build: ## Build the frontend into backend/static
 	$(NPM) run build
 
 api-types: ## Regenerate frontend/src/api/schema.d.ts from the FastAPI schema
@@ -58,8 +58,8 @@ api-types: ## Regenerate frontend/src/api/schema.d.ts from the FastAPI schema
 migration: ## Generate a migration from model changes: make migration MSG="add widgets"
 	@test -n "$(MSG)" || { echo 'Usage: make migration MSG="describe the change"'; exit 1; }
 	DATABASE_URL="$$($(UV_RUN) python scripts/localdb.py url)" bash -c '\
-		$(UV_RUN) alembic -c backend/alembic.ini upgrade head && \
-		$(UV_RUN) alembic -c backend/alembic.ini revision --autogenerate -m "$(MSG)"'
+		$(UV_RUN) alembic -c alembic.ini upgrade head && \
+		$(UV_RUN) alembic -c alembic.ini revision --autogenerate -m "$(MSG)"'
 
 lock: ## Update both lockfiles (public registry URLs only)
 	scripts/relock.sh

@@ -4,10 +4,10 @@ import { AppShell } from "@/app/AppShell";
 import { RouteError } from "@/app/RouteError";
 import { RequirePermission } from "@/components/RequirePermission";
 import { AdminRolesPage } from "@/pages/AdminRolesPage";
-import { AssistantPage } from "@/pages/AssistantPage";
+import { DocumentPage } from "@/pages/DocumentPage";
+import { DocumentsPage } from "@/pages/DocumentsPage";
 import { HomePage } from "@/pages/HomePage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
-import { NotesPage } from "@/pages/NotesPage";
 
 /** Add pages here and to NAV_ITEMS (app/nav.ts). FastAPI serves index.html for every path. */
 export const routes: RouteObject[] = [
@@ -17,8 +17,8 @@ export const routes: RouteObject[] = [
     errorElement: <RouteError />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: "notes", element: <NotesPage /> },
-      { path: "assistant", element: <AssistantPage /> },
+      { path: "documents", element: <DocumentsPage /> },
+      { path: "documents/:documentId", element: <DocumentPage /> },
       {
         path: "admin/roles",
         element: (

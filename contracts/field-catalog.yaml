@@ -1,0 +1,55 @@
+# Field catalog - part of the agent contract (see agent-api-contract.md).
+#
+# Lists every document type and its fields. The app stores one row per field (document_fields) and
+# the agent may only return fields listed here with `agent_generates: true`. Add a document type or
+# a field here first; the API, the UI and both agent runners (fake and real) read this file.
+#
+# Field metadata
+#   label            shown in the UI and given to the model
+#   type             text (a string) or list (a list of strings)
+#   agent_generates  true: the agent writes it (generate / enhance_field); users can still edit it.
+#                    false: only users write it.
+#   required         the user must provide it when creating a document
+#   description      what belongs in the field; given to the model as instructions
+
+version: "v1"
+
+document_types:
+  brief:
+    label: Brief
+    description: >-
+      A short working brief. The user states a title and a goal; the agent drafts the summary, key
+      points, risks and next steps from the goal and any source documents the user selects.
+    fields:
+      brief.title:
+        label: Title
+        type: text
+        agent_generates: false
+        required: true
+        description: A short name for the piece of work.
+      brief.goal:
+        label: Goal
+        type: text
+        agent_generates: false
+        required: true
+        description: What the work should achieve and for whom.
+      brief.summary:
+        label: Summary
+        type: text
+        agent_generates: true
+        description: Two to four sentences restating the goal and the approach in plain language.
+      brief.key_points:
+        label: Key points
+        type: list
+        agent_generates: true
+        description: Three to six short points a reader must know.
+      brief.risks:
+        label: Risks
+        type: list
+        agent_generates: true
+        description: The main things that could go wrong, each with a short mitigation.
+      brief.next_steps:
+        label: Next steps
+        type: list
+        agent_generates: true
+        description: Concrete, ordered actions to move the work forward.

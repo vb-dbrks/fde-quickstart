@@ -4,20 +4,36 @@ import type { components, paths } from "@/api/schema";
 
 type Schemas = components["schemas"];
 export type Me = Schemas["MeOut"];
-export type Note = Schemas["NoteOut"];
-export type NoteIn = Schemas["NoteIn"];
-export type Notification = Schemas["NotificationOut"];
-export type NotificationList = Schemas["NotificationList"];
+export type Health = Schemas["HealthOut"];
 export type Role = Schemas["Role"];
 export type Permission = Schemas["Permission"];
 export type RoleInfo = Schemas["RoleInfo"];
 export type RoleAssignment = Schemas["RoleAssignmentOut"];
-export type AgentInfo = Schemas["AgentInfo"];
-export type Health = Schemas["HealthOut"];
+export type Notification = Schemas["NotificationOut"];
+export type NotificationList = Schemas["NotificationList"];
+
+export type Access = Schemas["Access"];
+export type DocumentType = Schemas["DocumentTypeOut"];
+export type FieldSpec = Schemas["FieldSpecOut"];
+export type DocumentSummary = Schemas["DocumentSummary"];
+export type DocumentDetail = Schemas["DocumentOut"];
+export type DocumentField = Schemas["FieldOut"];
+export type Citation = Schemas["CitationOut"];
+export type DocumentVersion = Schemas["VersionOut"];
+export type AuditEntry = Schemas["AuditOut"];
+export type AccessEntry = Schemas["AccessOut"];
+
+export type AgentRun = Schemas["AgentRunOut"];
+export type AgentRunCreate = Schemas["AgentRunCreate"];
+export type AgentRunKind = AgentRunCreate["run_kind"];
+export type RunStatus = Schemas["RunStatus"];
+export type Suggestion = Schemas["SuggestionOut"];
+export type Thread = Schemas["ThreadOut"];
+export type Message = Schemas["MessageOut"];
 
 /**
  * Typed client for the FastAPI backend. Paths and payloads come from its OpenAPI schema;
- * run `make api-types` after changing backend/app/schemas.py or the routes.
+ * run `make api-types` after changing backend/domain/schemas.py or the routes.
  */
 export const api = createClient<paths>({
   baseUrl: window.location.origin,
@@ -55,4 +71,9 @@ function describeError(error: unknown, response: Response): string {
     }
   }
   return `${response.status} ${response.statusText}`.trim();
+}
+
+/** A fresh key per user action, so a retried request (double click, flaky network) runs once. */
+export function idempotencyKey(): string {
+  return crypto.randomUUID();
 }

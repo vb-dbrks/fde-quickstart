@@ -10,8 +10,8 @@ export default defineConfig({
     alias: { "@": path.resolve(import.meta.dirname, "src") },
   },
   build: {
-    // FastAPI serves the built app (backend/app/spa.py); the folder is uploaded on deploy.
-    outDir: "../backend/app/static",
+    // FastAPI serves the built app (backend/spa.py); the folder is uploaded on deploy.
+    outDir: "../backend/static",
     emptyOutDir: true,
     // React, React Router, Radix and TanStack Query come to ~540 kB minified (~170 kB gzipped).
     // As the app grows, load pages on demand with route `lazy()` instead of raising this further.

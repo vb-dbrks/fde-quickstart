@@ -1,4 +1,4 @@
-# Agent traces from the running app land here (app.agents.registry.configure_tracing).
+# Agent traces from the running app land here (backend.agents.tracing.enable_mlflow_tracing).
 resources:
   experiments:
     agent_traces:

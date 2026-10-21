@@ -1,4 +1,4 @@
-import { Bot, LayoutDashboard, ShieldCheck, StickyNote, type LucideIcon } from "lucide-react";
+import { FileText, LayoutDashboard, ShieldCheck, type LucideIcon } from "lucide-react";
 
 import type { Permission } from "@/lib/api";
 
@@ -12,8 +12,7 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Home", icon: LayoutDashboard },
-  { to: "/notes", label: "Notes", icon: StickyNote, permission: "notes:read" },
-  { to: "/assistant", label: "Assistant", icon: Bot },
+  { to: "/documents", label: "Documents", icon: FileText },
   { to: "/admin/roles", label: "Users & roles", icon: ShieldCheck, permission: "roles:manage" },
 ];
 

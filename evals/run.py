@@ -19,15 +19,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
 from app import migrations, notes
 from app.agents.assistant import AssistantAgent
 from app.agents.base import AgentContext
 from app.db import create_sessionmaker
 from app.permissions.roles import Role, permissions_for
 from app.permissions.service import Principal
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
 from evals.scorers import concise
 
 DATASET = Path(__file__).with_name("dataset.jsonl")
