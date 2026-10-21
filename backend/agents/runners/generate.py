@@ -62,19 +62,30 @@ def make_generate_runner(
                 "document_description": doc_type.description,
                 "current_fields": request.document_context.fields,
                 "instruction": request.document_context.user_instruction,
-                "fields_to_write": [field_payload(spec) for spec in specs.values()],
                 "sources": sources_payload(request),
             }
-        with steps.step("drafting_fields"):
-            chain = PROMPT | structured(model(), GeneratedFields)
+
+        def draft(paths_to_write: list[str]) -> list[GeneratedField]:
+            to_write = [field_payload(specs[path]) for path in paths_to_write]
             result = invoke(
-                chain,
-                {"instructions": load_prompt("generate"), "payload": to_json(payload)},
+                PROMPT | structured(model(), GeneratedFields),
+                {
+                    "instructions": load_prompt("generate"),
+                    "payload": to_json({**payload, "fields_to_write": to_write}),
+                },
                 GeneratedFields,
             )
+            return result.fields
+
+        with steps.step("drafting_fields"):
+            drafted = draft(list(specs))
+            # Models now and then skip a field; ask once more for just those.
+            if missing := [path for path in specs if path not in {f.field_path for f in drafted}]:
+                logger.info("Model skipped %s; asking for them again", missing)
+                drafted += draft(missing)
         with steps.step("checking_citations"):
             fields: list[OutputField] = []
-            for item in result.fields:
+            for item in drafted:
                 # The contract allows each requested field once. Models now and then write a field
                 # twice or add one that wasn't asked for: keep the first, drop the rest.
                 if item.field_path not in specs or any(

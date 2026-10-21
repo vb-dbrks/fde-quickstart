@@ -223,10 +223,33 @@ def test_json_in_the_text_is_accepted_without_a_tool_call() -> None:
     assert run.output.answer.content == "Plain answer."
 
 
+def test_skipped_fields_are_asked_for_again() -> None:
+    first = [generated(path, "text") for path in ("brief.summary", "brief.key_points")]
+    first.append(generated("brief.risks", ["r1"]))  # brief.next_steps skipped
+    model = ScriptedModel().queue(
+        GeneratedFields(fields=first),
+        GeneratedFields(fields=[generated("brief.next_steps", ["n1"])]),
+    )
+    run = run_once(model)
+    assert run.status == "succeeded", run.error
+    assert run.output is not None
+    assert {f.field_path for f in run.output.fields} == {
+        "brief.summary",
+        "brief.key_points",
+        "brief.risks",
+        "brief.next_steps",
+    }
+    second_payload = json.loads(str(model.prompts[1][-1].content))
+    assert [f["field_path"] for f in second_payload["fields_to_write"]] == ["brief.next_steps"]
+
+
 def test_repeated_and_unrequested_fields_are_dropped() -> None:
     first, again = generated("brief.summary", "First."), generated("brief.summary", "Again.")
     extra = generated("brief.title", "Not an agent field")
-    run = run_once(ScriptedModel().queue(GeneratedFields(fields=[first, again, extra])))
+    runtime = runtime_for(ScriptedModel().queue(GeneratedFields(fields=[first, again, extra])))
+    runtime.submit(make_request(generate_context={"scope": ["brief.summary"]}))
+    run = runtime.poll("run-1")
+    assert run is not None
     assert run.status == "succeeded", run.error
     assert run.output is not None
     assert [(f.field_path, f.value) for f in run.output.fields] == [("brief.summary", "First.")]
