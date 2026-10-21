@@ -121,6 +121,10 @@ sequenceDiagram
   with one setting (`AGENT_TRANSPORT=http`).
 - **The fake agent speaks the same contract**, so the UI and app logic can be built and tested before
   the real agent is ready - and CI never needs a model.
+- **Users' feedback lands on the run's MLflow trace**: thumbs up/down with reasons on each field and
+  answer, accepted and dismissed suggestions, and every correction a user makes to what the agent
+  wrote (as the expected value). In Databricks you filter traces by it, and `make eval-dataset`
+  turns it into eval cases (`docs/content/guides/user-feedback.md`).
 
 The docs site (`make docs`) covers each part, with the design decisions behind them.
 
@@ -134,6 +138,7 @@ The docs site (`make docs`) covers each part, with the design decisions behind t
 | `make api-types` | regenerate the UI's API types after an API change |
 | `make migration MSG="..."` | create a migration after a model change |
 | `make eval DEV=1` / `make eval PROFILE= LLM_ENDPOINT=` | evaluate the agent offline / against the real model |
+| `make eval-dataset PROFILE= EXPERIMENT=` | turn users' feedback on real runs into eval cases |
 | `make deploy TARGET= PROFILE=` / `make destroy ...` | deploy or remove a target |
 | `make docs` | serve the docs site on :3000 |
 | `make help` | everything else |

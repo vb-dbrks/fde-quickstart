@@ -14,10 +14,15 @@ import pytest
 
 from backend.contracts.agent_contract_v1 import (
     ERROR_CODES,
+    FEEDBACK_NAMES,
+    FEEDBACK_REASONS,
     STEP_VOCABULARY,
     AgentErrorEnvelope,
     AgentRunRequest,
     AgentRunStatus,
+    FeedbackRequest,
+    FeedbackResult,
+    expectation_name,
 )
 from backend.contracts.field_catalog import load_field_catalog
 from backend.contracts.validation import check_output, check_request
@@ -39,24 +44,44 @@ def statuses() -> list[AgentRunStatus]:
     return [AgentRunStatus.model_validate(e) for e in examples() if "status" in e]
 
 
-def test_every_example_is_classified() -> None:
-    for example in examples():
-        assert "document_context" in example or "status" in example or set(example) == {"error"}
+Model = type[
+    AgentRunRequest | AgentRunStatus | AgentErrorEnvelope | FeedbackRequest | FeedbackResult
+]
+
+
+def model_for(example: dict[str, Any]) -> Model:
+    if "document_context" in example:
+        return AgentRunRequest
+    if "status" in example:
+        return AgentRunStatus
+    if "kind" in example and "trace_id" in example:
+        return FeedbackRequest
+    if "recorded" in example:
+        return FeedbackResult
+    assert set(example) == {"error"}, f"unclassified example: {example}"
+    return AgentErrorEnvelope
 
 
 def test_examples_use_only_fields_the_models_know() -> None:
     """The models ignore unknown fields (tolerant reader), so a typo in an example would otherwise
     go unnoticed: every example must survive a round trip unchanged."""
     for example in examples():
-        model: type[AgentRunRequest | AgentRunStatus | AgentErrorEnvelope]
-        if "document_context" in example:
-            model = AgentRunRequest
-        elif "status" in example:
-            model = AgentRunStatus
-        else:
-            model = AgentErrorEnvelope
-        parsed = model.model_validate(example)
+        parsed = model_for(example).model_validate(example)
         assert parsed.model_dump(mode="json", exclude_unset=True) == example
+
+
+def test_feedback_examples_use_the_vocabulary() -> None:
+    feedback = [
+        FeedbackRequest.model_validate(e) for e in examples() if model_for(e) is FeedbackRequest
+    ]
+    assert {f.kind for f in feedback} == {"feedback", "expectation"}
+    for item in feedback:
+        assert item.metadata["field_path"]
+        if item.kind == "feedback":
+            assert item.name in FEEDBACK_NAMES
+            assert set(item.metadata.get("reasons", "").split(",")) <= {*FEEDBACK_REASONS, ""}
+        else:
+            assert item.name == expectation_name(item.metadata["field_path"])
 
 
 def test_requests_cover_every_run_kind() -> None:

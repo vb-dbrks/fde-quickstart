@@ -5,19 +5,21 @@ In-process, the app calls this ASGI app directly (httpx ASGITransport). Standalo
     uvicorn --factory backend.agents.server:create_agent_app --port 9000      (make agent)
 """
 
+import logging
 from concurrent.futures import Executor, ThreadPoolExecutor
 from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from backend.agents.config import AgentSettings
 from backend.agents.fake import FakeAgent
 from backend.agents.llm import chat_model_factory
 from backend.agents.runners import real_runners
 from backend.agents.runtime import AgentRuntime, RequestRejected, RunFn
-from backend.agents.tracing import enable_mlflow_tracing
+from backend.agents.tracing import RunTracer, enable_mlflow_tracing
 from backend.contracts.agent_contract_v1 import (
     AGENT_CONTRACT_VERSION,
     RUN_KINDS,
@@ -25,13 +27,19 @@ from backend.contracts.agent_contract_v1 import (
     AgentErrorEnvelope,
     AgentRunKind,
     AgentRunRequest,
+    FeedbackRequest,
     contract_document,
 )
 from backend.contracts.field_catalog import load_field_catalog
 
+logger = logging.getLogger(__name__)
+
 
 def build_runtime(
-    settings: AgentSettings | None = None, *, executor: Executor | None = None
+    settings: AgentSettings | None = None,
+    *,
+    executor: Executor | None = None,
+    tracer: RunTracer | None = None,
 ) -> AgentRuntime:
     """Pick fake or real runners per run kind (AGENT_RUNNER / AGENT_RUNNER_OVERRIDES)."""
     settings = settings or AgentSettings()
@@ -61,7 +69,7 @@ def build_runtime(
         catalog=catalog,
         executor=executor
         or ThreadPoolExecutor(max_workers=settings.agent_max_workers, thread_name_prefix="agent"),
-        tracer=enable_mlflow_tracing(settings.mlflow_experiment_id),
+        tracer=tracer or enable_mlflow_tracing(settings.mlflow_experiment_id),
         runner_names=choices,
         max_runs_kept=settings.agent_max_runs_kept,
     )
@@ -113,6 +121,30 @@ def create_agent_app(runtime: AgentRuntime | None = None) -> FastAPI:
                 retryable=True,
             )
         return JSONResponse(run.model_dump(mode="json", exclude_none=True))
+
+    @app.post("/agent/feedback")
+    async def record_feedback(request: Request) -> JSONResponse:
+        try:
+            feedback = FeedbackRequest.model_validate(await request.json())
+        except ValidationError as exc:
+            return _error("VALIDATION_ERROR", _summarise(exc), status.HTTP_400_BAD_REQUEST)
+        except ValueError as exc:
+            return _error("VALIDATION_ERROR", str(exc), status.HTTP_400_BAD_REQUEST)
+        try:
+            # The trace store is called synchronously; keep it off the event loop.
+            result = await run_in_threadpool(runtime.record_feedback, feedback)
+        except Exception as exc:
+            logger.warning("Recording feedback %s failed: %s", feedback.feedback_id, exc)
+            if getattr(exc, "error_code", None) == "INVALID_PARAMETER_VALUE":
+                # The trace store rejected the feedback itself: sending it again won't help.
+                return _error("VALIDATION_ERROR", str(exc), status.HTTP_400_BAD_REQUEST)
+            return _error(
+                "FEEDBACK_FAILED",
+                "The trace store did not accept the feedback.",
+                status.HTTP_502_BAD_GATEWAY,
+                retryable=True,
+            )
+        return JSONResponse(result.model_dump(mode="json", exclude_none=True))
 
     @app.get("/contract")
     async def contract() -> dict[str, Any]:

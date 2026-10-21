@@ -116,6 +116,9 @@ export interface paths {
         /**
          * Update Field
          * @description Edit a field, or accept an enhance_field suggestion (``accepted_from_run_id``).
+         *
+         *     Both are feedback on the agent: accepting records ``suggestion_accepted``; changing a value the
+         *     agent wrote records the new value as the run's expected value for that field.
          */
         patch: operations["update_field_api_documents__document_id__fields__field_path__patch"];
         trace?: never;
@@ -266,6 +269,66 @@ export interface paths {
         get: operations["list_messages_api_threads__thread_id__messages_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/fields/{field_path}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Rate Field
+         * @description Rate the value the agent wrote for a field. Rating again replaces your earlier rating.
+         */
+        put: operations["rate_field_api_documents__document_id__fields__field_path__rating_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/messages/{message_id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Rate Answer
+         * @description Rate an assistant answer in one of your conversations.
+         */
+        put: operations["rate_answer_api_messages__message_id__rating_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Suggestion
+         * @description Dismiss an enhance_field suggestion: the agent's revision was not wanted.
+         */
+        post: operations["dismiss_suggestion_api_agent_runs__run_id__dismiss_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -585,6 +648,7 @@ export interface components {
             updated_by?: string | null;
             /** Updated At */
             updated_at?: string | null;
+            my_rating?: components["schemas"]["RatingOut"] | null;
         };
         /**
          * FieldSource
@@ -671,6 +735,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            my_rating?: components["schemas"]["RatingOut"] | null;
         };
         /** NotificationList */
         NotificationList: {
@@ -704,6 +769,27 @@ export interface components {
          * @enum {string}
          */
         Permission: "documents:create" | "agents:run" | "documents:access_any" | "roles:manage";
+        /**
+         * RatingIn
+         * @description A thumbs up (true) or down (false) on something the agent wrote, with optional reasons.
+         */
+        RatingIn: {
+            /** Rating */
+            rating: boolean;
+            /** Reasons */
+            reasons?: ("accurate" | "usable_as_is" | "factually_incorrect" | "unsupported_by_sources" | "missing_detail" | "too_long" | "wrong_tone")[];
+            /** Comment */
+            comment?: string | null;
+        };
+        /** RatingOut */
+        RatingOut: {
+            /** Rating */
+            rating: boolean;
+            /** Reasons */
+            reasons: ("accurate" | "usable_as_is" | "factually_incorrect" | "unsupported_by_sources" | "missing_detail" | "too_long" | "wrong_tone")[];
+            /** Comment */
+            comment: string | null;
+        };
         /**
          * Role
          * @enum {string}
@@ -1385,6 +1471,106 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MessageOut"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_field_api_documents__document_id__fields__field_path__rating_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                field_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RatingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_answer_api_messages__message_id__rating_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RatingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_suggestion_api_agent_runs__run_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

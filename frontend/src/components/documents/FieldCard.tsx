@@ -5,14 +5,20 @@ import { toast } from "sonner";
 import { FieldValue } from "@/components/documents/FieldValue";
 import { ProvenanceBadge, ProvenanceDetails } from "@/components/documents/Provenance";
 import { RunProgress } from "@/components/documents/RunProgress";
-import { fromText, toText } from "@/components/documents/values";
+import { RatingControl } from "@/components/documents/RatingControl";
+import { fromText, isEmpty, toText } from "@/components/documents/values";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { keyed, type AgentRun, type DocumentField } from "@/lib/api";
 import { isTerminal, useAgentRun } from "@/lib/agentRuns";
-import { useStartAgentRun, useUpdateField } from "@/lib/queries";
+import {
+  useDismissSuggestion,
+  useRateField,
+  useStartAgentRun,
+  useUpdateField,
+} from "@/lib/queries";
 
 type Mode = "view" | "edit" | "enhance";
 
@@ -48,6 +54,9 @@ export function FieldCard({
           <ProvenanceBadge field={field} />
         </CardTitle>
         <CardAction className="flex items-center gap-1">
+          {field.source === "agent" && !isEmpty(field.value) && (
+            <FieldRating documentId={documentId} field={field} />
+          )}
           <ProvenanceDetails field={field} sourceTitles={sourceTitles} />
           {canEdit && mode === "view" && (
             <Button
@@ -223,6 +232,7 @@ function SuggestionReview({
   onDone: () => void;
 }) {
   const update = useUpdateField(documentId);
+  const dismiss = useDismissSuggestion();
   const suggestion = run.suggestion;
   if (!suggestion) return null;
 
@@ -255,10 +265,30 @@ function SuggestionReview({
         <Button size="sm" onClick={accept} disabled={update.isPending}>
           <Check aria-hidden /> Accept
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDone}>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            dismiss.mutate(run.id); // the agent learns its revision wasn't wanted
+            onDone();
+          }}
+        >
           <X aria-hidden /> Dismiss
         </Button>
       </div>
     </section>
+  );
+}
+
+function FieldRating({ documentId, field }: { documentId: string; field: DocumentField }) {
+  const rate = useRateField(documentId, field.field_path);
+  return (
+    <RatingControl
+      label={field.label}
+      current={field.my_rating}
+      rate={(rating, options) =>
+        rate.mutate(rating, { ...options, onError: (error) => toast.error(error.message) })
+      }
+    />
   );
 }

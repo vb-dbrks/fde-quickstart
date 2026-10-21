@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.auth.roles import Permission, Role
+from backend.contracts.agent_contract_v1 import FeedbackReason
 from backend.domain.enums import Access, FieldSource, RunStatus
 from backend.domain.models import EMAIL_LENGTH
 
@@ -56,6 +57,20 @@ class CitationOut(BaseModel):
     snippet: str | None = None
 
 
+class RatingIn(BaseModel):
+    """A thumbs up (true) or down (false) on something the agent wrote, with optional reasons."""
+
+    rating: bool
+    reasons: list[FeedbackReason] = Field(default_factory=list, max_length=7)
+    comment: str | None = Field(default=None, max_length=2_000)
+
+
+class RatingOut(BaseModel):
+    rating: bool
+    reasons: list[FeedbackReason]
+    comment: str | None
+
+
 class FieldOut(BaseModel):
     field_path: str
     label: str
@@ -70,6 +85,8 @@ class FieldOut(BaseModel):
     agent_run_id: str | None = None
     updated_by: str | None = None
     updated_at: datetime | None = None
+    # Your rating of the value the agent wrote (only for agent-written values).
+    my_rating: RatingOut | None = None
 
 
 class DocumentSummary(BaseModel):
@@ -207,6 +224,8 @@ class MessageOut(BaseModel):
     citations: list[CitationOut]
     agent_run_id: str | None
     created_at: datetime
+    # Your rating of an assistant answer.
+    my_rating: RatingOut | None = None
 
 
 # ---- notifications and roles --------------------------------------------------------------------

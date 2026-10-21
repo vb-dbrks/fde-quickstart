@@ -9,6 +9,7 @@ import {
   type AgentRun,
   type AgentRunCreate,
   type Keyed,
+  type RatingIn,
   type Role,
 } from "@/lib/api";
 
@@ -268,6 +269,44 @@ export function useMessages(threadId: string | undefined) {
         }),
       ),
     enabled: Boolean(threadId),
+  });
+}
+
+// ---- feedback on the agent (stored on the run's MLflow trace) ---------------------------------
+
+export function useRateField(documentId: string, fieldPath: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RatingIn) =>
+      unwrap(
+        api.PUT("/api/documents/{document_id}/fields/{field_path}/rating", {
+          params: { path: { document_id: documentId, field_path: fieldPath } },
+          body,
+        }),
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.document(documentId) }),
+  });
+}
+
+export function useRateAnswer(threadId: string, messageId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RatingIn) =>
+      unwrap(
+        api.PUT("/api/messages/{message_id}/rating", {
+          params: { path: { message_id: messageId } },
+          body,
+        }),
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.messages(threadId) }),
+  });
+}
+
+/** The user dismissed an enhance_field suggestion - feedback that the revision wasn't wanted. */
+export function useDismissSuggestion() {
+  return useMutation({
+    mutationFn: (runId: string) =>
+      unwrap(api.POST("/api/agent-runs/{run_id}/dismiss", { params: { path: { run_id: runId } } })),
   });
 }
 

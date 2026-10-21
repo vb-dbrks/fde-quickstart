@@ -1,10 +1,11 @@
 from fastapi import APIRouter, status
 
 from backend.api.deps import SessionDep
+from backend.api.presenters import rating_out
 from backend.auth.access import require_document
 from backend.auth.deps import CurrentPrincipal
 from backend.domain.schemas import MessageOut, ThreadCreate, ThreadOut
-from backend.services import assistant
+from backend.services import assistant, feedback
 
 router = APIRouter(tags=["assistant"])
 
@@ -37,4 +38,11 @@ async def list_messages(
 ) -> list[MessageOut]:
     thread = await assistant.require_thread(db, principal, thread_id)
     await require_document(db, principal, thread.document_id)
-    return [MessageOut.model_validate(m) for m in await assistant.list_messages(db, thread.id)]
+    ratings = await feedback.my_ratings(db, principal, thread.document_id)
+    out = []
+    for message in await assistant.list_messages(db, thread.id):
+        rated = ratings.get((message.agent_run_id or "", f"message:{message.id}"))
+        out.append(
+            MessageOut.model_validate(message).model_copy(update={"my_rating": rating_out(rated)})
+        )
+    return out

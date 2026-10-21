@@ -12,7 +12,7 @@ Change contracts/agent-api-contract.md (the golden record), these models and the
 same pull request - tests/contracts fail otherwise.
 """
 
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -38,13 +38,34 @@ ERROR_CODES = (
     "MODEL_ERROR",  # the model endpoint failed or returned nothing usable
     "OUTPUT_INVALID",  # the agent produced output that breaks the contract or the catalog
     "INTERNAL_ERROR",  # anything else
+    "FEEDBACK_FAILED",  # POST /agent/feedback: the trace store refused it (retryable)
 )
 
 MAX_SOURCE_TEXT = 20_000
 
+# Feedback vocabulary (golden record, section 7): names of the assessments stored on a run's trace,
+# and the reasons a user can give with a field rating.
+FEEDBACK_NAMES = ("field_rating", "answer_rating", "suggestion_accepted")
+FeedbackReason = Literal[
+    "accurate",
+    "usable_as_is",
+    "factually_incorrect",
+    "unsupported_by_sources",
+    "missing_detail",
+    "too_long",
+    "wrong_tone",
+]
+FEEDBACK_REASONS: tuple[str, ...] = get_args(FeedbackReason)
+
+
+def expectation_name(field_path: str) -> str:
+    """The name of a correction's expectation: the field path with "." as "__" (``brief__summary``).
+    Databricks rejects assessment names that contain a dot."""
+    return field_path.replace(".", "__")
+
 
 class _ContractModel(BaseModel):
-    # Unknown fields are ignored, not rejected: v1 grows by optional fields (section 7 of the golden
+    # Unknown fields are ignored, not rejected: v1 grows by optional fields (section 8 of the golden
     # record), and the app and a separately deployed agent may be a release apart.
     model_config = ConfigDict(extra="ignore", frozen=True)
 
@@ -200,13 +221,53 @@ class AgentErrorEnvelope(_ContractModel):
     error: AgentError
 
 
+# ---------- feedback ------------------------------------------------------------------------------
+
+
+class FeedbackRequest(_ContractModel):
+    """A user's feedback on a run's output, to be stored on the run's trace (POST /agent/feedback).
+
+    ``feedback`` is a judgement (a rating, an accept/dismiss verdict); ``expectation`` is ground truth
+    (the value a user corrected a field to), which evaluation datasets are built from.
+    """
+
+    feedback_id: str
+    trace_id: str
+    kind: Literal["feedback", "expectation"]
+    name: str = Field(max_length=200)
+    value: Any
+    rationale: str | None = Field(default=None, max_length=4_000)
+    user: str
+    metadata: dict[str, str] = Field(default_factory=dict)
+    # The assessment_id of the same user's earlier feedback that this one replaces.
+    replaces: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if "." in self.name:
+            raise ValueError("assessment names can't contain '.' (see expectation_name)")
+        if self.kind == "feedback" and not isinstance(self.value, bool):
+            raise ValueError("feedback values are booleans (true good, false bad)")
+        return self
+
+
+class FeedbackResult(_ContractModel):
+    feedback_id: str
+    # False when tracing is off in this agent (local development): there is nowhere to store it.
+    recorded: bool
+    assessment_id: str | None = None
+
+
 def contract_document() -> dict[str, Any]:
-    """What GET /contract returns: the version and the JSON schemas of both envelopes."""
+    """What GET /contract returns: the version, vocabularies and the JSON schemas of the envelopes."""
     return {
         "contract_version": AGENT_CONTRACT_VERSION,
         "run_kinds": list(RUN_KINDS),
         "step_vocabulary": {kind: list(steps) for kind, steps in STEP_VOCABULARY.items()},
         "error_codes": list(ERROR_CODES),
+        "feedback_names": list(FEEDBACK_NAMES),
+        "feedback_reasons": list(FEEDBACK_REASONS),
         "request_schema": AgentRunRequest.model_json_schema(),
         "status_schema": AgentRunStatus.model_json_schema(),
+        "feedback_schema": FeedbackRequest.model_json_schema(),
     }

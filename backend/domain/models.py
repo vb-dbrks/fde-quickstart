@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -162,6 +162,50 @@ class Message(Base):
     citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     agent_run_id: Mapped[str | None] = mapped_column(String(ID_LENGTH))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Feedback(Base):
+    """A user's feedback on agent output: a rating, an accept/dismiss verdict, or a correction.
+
+    Kept here first, then stored on the run's MLflow trace through the agent (an outbox: the
+    ``sync_*`` columns track delivery). One row per user and target; changing your mind updates the
+    row and bumps ``revision``, and the new revision replaces the old assessment on the trace.
+    """
+
+    __tablename__ = "feedback"
+    __table_args__ = (
+        UniqueConstraint(
+            "agent_run_id", "kind", "name", "target", "principal", name="uq_feedback_target"
+        ),
+        Index("ix_feedback_sync_status_next_attempt_at", "sync_status", "next_attempt_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True, default=new_id)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    agent_run_id: Mapped[str] = mapped_column(ForeignKey("agent_runs.id", ondelete="CASCADE"))
+    # Copied from the run; null when the run was not traced (then there is nothing to deliver).
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16))  # feedback | expectation
+    name: Mapped[str] = mapped_column(String(200))  # field_rating, ... or the field path
+    target: Mapped[str] = mapped_column(String(200))  # the field path, or message:<id>
+    value: Mapped[Any] = mapped_column(JSONB)
+    reasons: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    comment: Mapped[str | None] = mapped_column(Text)
+    principal: Mapped[str] = mapped_column(String(EMAIL_LENGTH))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Delivery to the trace: pending -> synced, or skipped (tracing off) / failed (gave up).
+    sync_status: Mapped[str] = mapped_column(String(16), default="pending")
+    sync_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sync_error: Mapped[str | None] = mapped_column(Text)
+    assessment_id: Mapped[str | None] = mapped_column(String(64))
+    # The assessment this revision replaces on the trace (the previous revision's).
+    replaces_assessment_id: Mapped[str | None] = mapped_column(String(64))
 
 
 class IdempotencyKey(Base):

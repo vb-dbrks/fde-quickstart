@@ -28,6 +28,7 @@ to one without the other fails CI.
 | --- | --- | --- |
 | `POST` | `/agent/run` | Submit a run. Returns `AgentRunStatus` with `status: "accepted"`. |
 | `GET` | `/agent/run/{app_agent_run_id}` | Latest status. Idempotent; the caller backs off. |
+| `POST` | `/agent/feedback` | Record a user's feedback on a run's output on the run's trace (section 7). |
 | `GET` | `/contract` | Contract version, run kinds, step vocabulary, error codes and JSON schemas. |
 | `GET` | `/healthz` | Liveness, and which runner (fake or real) serves each run kind. |
 
@@ -325,7 +326,70 @@ The app adds its own codes on `agent_runs` (never sent by the agent):
 The runtime enforces these before reporting `succeeded`; the app checks them again before
 materialising.
 
-## 7. Versioning
+## 7. Feedback — `FeedbackRequest`
+
+Users judge what the agent wrote; the app records it in Lakebase first, then sends it here so the
+agent can store it on the run's MLflow trace (the agent owns tracing). In Databricks the team then
+finds weak runs, builds evaluation datasets from real corrections, and aligns LLM judges with users.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `feedback_id` | string | The app's id. Sending it again records nothing new. |
+| `trace_id` | string | The run's `trace_id` from its status. |
+| `kind` | `"feedback"` \| `"expectation"` | A judgement, or ground truth (a corrected value). |
+| `name` | string | From the vocabulary below. No `.` (Databricks rejects it). |
+| `value` | any | `bool` for ratings and verdicts; the field's value for expectations. |
+| `rationale` | string? | The user's comment. |
+| `user` | string | Who gave it (email). Recorded as a `HUMAN` source. |
+| `metadata` | object (string → string) | At least `field_path` for field feedback; see below. |
+| `replaces` | string? | `assessment_id` of the same user's earlier feedback that this one replaces. |
+
+| `name` | `kind` | `value` | Sent when |
+| --- | --- | --- | --- |
+| `field_rating` | feedback | `true` good, `false` bad | the user rates an agent-written field (`metadata.reasons`: comma-separated reasons) |
+| `answer_rating` | feedback | `true` / `false` | the user rates an assistant answer (`metadata.message_id`) |
+| `suggestion_accepted` | feedback | `true` accepted, `false` dismissed | the user accepts or dismisses an `enhance_field` suggestion |
+| the field path with `.` as `__`, e.g. `brief__summary` | expectation | the corrected value | the user edits a field the agent wrote (`metadata.field_path` holds the path) |
+
+Reasons: `accurate`, `usable_as_is`, `factually_incorrect`, `unsupported_by_sources`,
+`missing_detail`, `too_long`, `wrong_tone`.
+
+```json
+{
+  "feedback_id": "fb-1",
+  "trace_id": "tr-6f1c0c2e9a4b4b7d",
+  "kind": "feedback",
+  "name": "field_rating",
+  "value": false,
+  "rationale": "The second risk is not in the interview notes.",
+  "user": "editor@example.com",
+  "metadata": {"field_path": "brief.risks", "reasons": "unsupported_by_sources", "app_agent_run_id": "run-1", "document_type": "brief"}
+}
+```
+
+```json
+{
+  "feedback_id": "fb-2",
+  "trace_id": "tr-6f1c0c2e9a4b4b7d",
+  "kind": "expectation",
+  "name": "brief__risks",
+  "value": ["Templates may not fit every team's data.", "Guided setup adds maintenance."],
+  "user": "editor@example.com",
+  "metadata": {"field_path": "brief.risks", "app_agent_run_id": "run-1", "document_type": "brief"},
+  "replaces": "a-41"
+}
+```
+
+The response says whether it was recorded. `recorded` is `false` when tracing is off in that agent
+(local development), and the app does not retry those.
+
+```json
+{"feedback_id": "fb-1", "recorded": true, "assessment_id": "a-42"}
+```
+
+Errors: `400 VALIDATION_ERROR`; `502 FEEDBACK_FAILED` (retryable) when the trace store refused it.
+
+## 8. Versioning
 
 - v1 accepts additive, optional fields. Anything else — renaming, removing, making a field required,
   changing a type — is v2, served side by side until the app has moved.

@@ -1,12 +1,13 @@
 """Shared FastAPI dependencies. Everything comes from ``app.state``, set up in backend.main."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.contracts.field_catalog import FieldCatalog, load_field_catalog
+from backend.services import feedback
 from backend.services.agent_client import AgentClient
 from backend.services.notifications import Notifier
 from backend.settings import Settings
@@ -43,8 +44,22 @@ def get_catalog() -> FieldCatalog:
     return load_field_catalog()
 
 
+def get_feedback_delivery(
+    background: BackgroundTasks,
+    sessions: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessionmaker)],
+    client: Annotated[AgentClient, Depends(get_agent_client)],
+) -> Callable[[], None]:
+    """Call after committing feedback: delivers it to the trace once the response has been sent."""
+
+    def schedule() -> None:
+        background.add_task(feedback.deliver_due, sessions, client)
+
+    return schedule
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 NotifierDep = Annotated[Notifier, Depends(get_notifier)]
 AgentClientDep = Annotated[AgentClient, Depends(get_agent_client)]
 CatalogDep = Annotated[FieldCatalog, Depends(get_catalog)]
+DeliverFeedback = Annotated[Callable[[], None], Depends(get_feedback_delivery)]

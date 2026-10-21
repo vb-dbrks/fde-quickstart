@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status
 from sqlalchemy import select
 
-from backend.api.deps import CatalogDep, SessionDep
+from backend.api.deps import CatalogDep, DeliverFeedback, SessionDep
 from backend.api.presenters import document_out, document_summary, field_out
 from backend.auth.access import require_document
 from backend.auth.deps import CurrentPrincipal
@@ -21,7 +21,7 @@ from backend.domain.schemas import (
     FieldUpdate,
     VersionOut,
 )
-from backend.services import documents
+from backend.services import documents, feedback
 from backend.services.agent_runs import visible_runs
 
 router = APIRouter(tags=["documents"])
@@ -75,7 +75,8 @@ async def _document_out(
             .order_by(AgentRun.created_at)
         )
     ).all()
-    return document_out(document, access, rows, catalog, active)
+    ratings = await feedback.my_ratings(db, principal, document.id)
+    return document_out(document, access, rows, catalog, active, ratings)
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED)
@@ -104,8 +105,12 @@ async def update_field(
     principal: CurrentPrincipal,
     db: SessionDep,
     catalog: CatalogDep,
+    deliver_feedback: DeliverFeedback,
 ) -> FieldOut:
-    """Edit a field, or accept an enhance_field suggestion (``accepted_from_run_id``)."""
+    """Edit a field, or accept an enhance_field suggestion (``accepted_from_run_id``).
+
+    Both are feedback on the agent: accepting records ``suggestion_accepted``; changing a value the
+    agent wrote records the new value as the run's expected value for that field."""
     document, _ = await require_document(db, principal, document_id, Access.EDIT, for_update=True)
     accepted_run = None
     if payload.accepted_from_run_id:
@@ -122,6 +127,7 @@ async def update_field(
         accepted_run=accepted_run,
     )
     await db.commit()
+    deliver_feedback()
     return field_out(field_path, catalog, document, row)
 
 

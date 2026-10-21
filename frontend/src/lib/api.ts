@@ -30,6 +30,9 @@ export type RunStatus = Schemas["RunStatus"];
 export type Suggestion = Schemas["SuggestionOut"];
 export type Thread = Schemas["ThreadOut"];
 export type Message = Schemas["MessageOut"];
+export type RatingIn = Schemas["RatingIn"];
+export type Rating = Schemas["RatingOut"];
+export type FeedbackReason = Rating["reasons"][number];
 
 /**
  * Typed client for the FastAPI backend. Paths and payloads come from its OpenAPI schema;

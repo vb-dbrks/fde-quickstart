@@ -28,6 +28,8 @@ from backend.contracts.agent_contract_v1 import (
     AGENT_CONTRACT_VERSION,
     AgentRunRequest,
     AgentRunStatus,
+    FeedbackRequest,
+    FeedbackResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,6 +116,15 @@ class AgentClient:
 
     async def poll(self, run_id: str) -> AgentRunStatus:
         return self._status(await self._request("GET", f"/agent/run/{run_id}"))
+
+    async def send_feedback(self, feedback: FeedbackRequest) -> FeedbackResult:
+        """Have the agent store a user's feedback on the run's trace (contract section 7)."""
+        body = feedback.model_dump(mode="json", exclude_none=True)
+        response = await self._request("POST", "/agent/feedback", json=body)
+        try:
+            return FeedbackResult.model_validate(response.json())
+        except ValueError as exc:
+            raise AgentContractError("agent feedback response did not match contract v1") from exc
 
     async def contract(self) -> dict[str, Any]:
         data: dict[str, Any] = (await self._request("GET", "/contract")).json()

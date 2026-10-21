@@ -28,6 +28,7 @@ from backend.services.notifications import Notifier
 from backend.settings import Settings
 from backend.spa import mount_spa
 from backend.workers.agent_run_poller import AgentRunPoller
+from backend.workers.feedback_sender import FeedbackSender
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +80,17 @@ def create_app(
             sessions, refresh, interval_seconds=settings.poller_interval_seconds
         )
         app.state.poller = poller
+        sender = FeedbackSender(
+            sessions,
+            lambda: app.state.agent_client,
+            interval_seconds=settings.feedback_retry_interval_seconds,
+        )
+        app.state.feedback_sender = sender
         if settings.poller_enabled:
             poller.start()
+            sender.start()
         yield
+        await sender.stop()
         await poller.stop()
         await client.aclose()
         if runtime is not None:
