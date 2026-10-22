@@ -22,7 +22,13 @@ export default defineConfig([
   },
   {
     // shadcn/ui components export variants next to components; route tables and tests export helpers.
-    files: ["src/components/ui/**", "src/routes.tsx", "src/test/**"],
+    files: [
+      "src/components/ui/**",
+      "src/routes.tsx",
+      "src/test/**",
+      "src/examples/registry.tsx",
+      "src/agent/AgentProvider.tsx",
+    ],
     rules: { "react-refresh/only-export-components": "off" },
   },
 ]);

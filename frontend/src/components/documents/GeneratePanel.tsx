@@ -1,3 +1,5 @@
+import { useInteraction } from "@/agent/AgentProvider";
+import { StructuredResult } from "@/agent/components";
 import { Sparkles } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -37,11 +39,12 @@ export function GeneratePanel({
   const [instruction, setInstruction] = useState("");
   const [sources, setSources] = useState<string[]>([]);
   const [runId, setRunId] = useState(initialRunId);
+  const interaction = useInteraction(runId);
   const start = useStartAgentRun(document.id);
   const run = useAgentRun(runId, {
     onSettled: (settled) =>
       settled.status === "succeeded"
-        ? toast.success("Fields generated")
+        ? toast.success("Draft ready for review")
         : toast.error("Generation failed", { description: settled.error_message ?? undefined }),
   }).data;
   const running = start.isPending || (run !== undefined && !isTerminal(run.status));
@@ -73,8 +76,8 @@ export function GeneratePanel({
             {generated ? "Regenerate with the agent" : "Generate with the agent"}
           </CardTitle>
           <CardDescription>
-            The agent drafts every agent field from this document and the sources you pick. Each run
-            creates a new version; edits you make afterwards are kept in the audit trail.
+            The agent drafts every agent field from this document and the sources you pick. Review
+            and accept the draft before it updates your saved fields.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -112,6 +115,12 @@ export function GeneratePanel({
                 })}
               </div>
             </fieldset>
+          )}
+          {runId && !interaction.finished && interaction.state.preview !== undefined && (
+            <div className="rounded-md border border-dashed p-3">
+              <p className="mb-2 text-sm">Draft preview · not saved</p>
+              <StructuredResult value={interaction.state.preview} />
+            </div>
           )}
           {run && <RunProgress run={run} className="rounded-md bg-muted/50 p-3" />}
         </CardContent>

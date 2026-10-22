@@ -1,3 +1,4 @@
+import { examples, useExamples } from "@/examples/registry";
 import { NavLink } from "react-router";
 
 import { APP_TITLE, NAV_ITEMS } from "@/app/nav";
@@ -6,7 +7,14 @@ import { cn } from "@/lib/utils";
 
 export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
   const { can } = usePermissions();
-  const items = NAV_ITEMS.filter((item) => !item.permission || can(item.permission));
+  const enabled = useExamples();
+  const exampleItems = examples
+    .filter((item) => enabled.data?.includes(item.id))
+    .map((item) => ({ to: `/${item.path}`, label: item.title, icon: item.icon }));
+  const items = [
+    ...NAV_ITEMS.filter((item) => !item.permission || can(item.permission)),
+    ...exampleItems,
+  ];
 
   return (
     <aside

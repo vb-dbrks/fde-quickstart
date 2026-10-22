@@ -7,8 +7,7 @@ change it without breaking it.
 ## What this is
 
 A Databricks App: FastAPI backend + React frontend in one app, Lakebase Postgres as the system of
-record, and a stateless AI agent the app calls through a versioned submit/poll contract. The sample
-domain is a "brief" document whose fields the agent drafts; projects replace it with their own.
+record, and a stateless AI agent the app calls through a versioned submit/poll contract. Three independently removable examples demonstrate standalone chat, structured generation and brief documents. New applications need no document or field catalog.
 
 ## Commands
 
@@ -34,11 +33,12 @@ domain is a "brief" document whose fields the agent drafts; projects replace it 
    `tests/agents/test_boundary.py` enforces this. The agent gets everything it needs in the request.
 2. **Never call a model from an API route.** Agent work is a *run*: the app stores it in
    `agent_runs`, submits it, polls it, and materialises the result. To add an agent capability, add a
-   run kind (recipe below).
+   registration (recipe below).
 3. **The contract is the golden record.** `contracts/agent-api-contract.md`,
    `backend/contracts/agent_contract_v1.py` and the fake runner (`backend/agents/fake/runner.py`)
-   change together, in the same commit. Within v1 only add optional fields; anything else is v2.
-4. **The field catalog is the domain model.** `contracts/field-catalog.yaml` defines document types
+   change together, in the same commit. Within v1 only add optional fields. Generic agents use
+   `contracts/execution-v2.md` and `backend/contracts/execution.py`, carrying official AG-UI types.
+4. **The field catalog belongs only to the document example.** `contracts/field-catalog.yaml` defines document types
    and fields, and which fields the agent may write. Change it first; the API, the UI forms, both
    runners and the validation read it.
 5. **Schema changes are migrations.** Edit `backend/domain/models.py`, then `make migration MSG=...`.
@@ -94,10 +94,22 @@ if you like, the dataset in `evals/dataset.jsonl`, and the test fixtures that us
 fields are written by `generate` and can be enhanced. No migration: field values live in
 `document_fields` rows.
 
-**Add an agent capability (a run kind)** (`adding-a-run-kind.md`). In order: the contract (golden
-record, models, validation), the fake runner, the prompt and real runner, the app (schemas, payload
-builder, `_validate` and `_materialise` in `backend/services/agent_runs.py`, presenter), the UI
-(`useStartAgentRun` + `useAgentRun`), evals. `make contract test` after each layer.
+**Add an agent capability** (`agentic-applications.md`). Define input/result schemas, register an
+`AgentDefinition` in `backend/agents/example_registry.py` and an `AgentApplication` in
+`backend/examples/registry.py`. Supply fake/real runners and application callbacks. Use shared
+React primitives from `frontend/src/agent/` and register example routes/navigation explicitly.
+Do not extend v1 run-kind enums for generic capabilities or import document code into
+`backend/services/interactions.py` or `frontend/src/agent/`. Run the contract and interaction tests.
+
+**Preserve review boundaries.** AG-UI state is provisional. Only a validated result and successful
+application finalisation may publish terminal success. Acceptance is a separate operation. Never
+save partial model output into accepted domain data. Document acceptance must compare captured field
+revisions and write provenance/audit/version data atomically. Never resubmit when reconnecting.
+Frontend tools must use registered argument schemas and claim their action before executing it.
+
+**Keep examples removable.** `ENABLED_EXAMPLES` gates backend routes/registrations and frontend
+navigation. Disabling documents must not load the field catalog. Preserve v1 history and legacy run
+policy during migrations. AG-UI cursor recovery is our transport extension, not standard resumption.
 
 **Add an endpoint and a page.** Schema in `backend/domain/schemas.py`, logic in `backend/services/`,
 route in `backend/api/`, test in `tests/backend/`; `make api-types`; a hook in

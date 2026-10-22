@@ -2,6 +2,8 @@
 
 import json
 import logging
+from collections.abc import Callable
+from contextvars import ContextVar
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -17,6 +19,8 @@ from backend.contracts.agent_contract_v1 import AgentRunRequest, Citation, Outpu
 from backend.contracts.field_catalog import FieldSpec
 
 logger = logging.getLogger(__name__)
+Preview = Callable[[dict[str, Any], bool], None]
+preview_callback: ContextVar[Preview | None] = ContextVar("agent_preview", default=None)
 
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 # Bump when a prompt changes, so traces and outputs say which prompt produced them.
@@ -91,17 +95,14 @@ def structured[SchemaT: BaseModel](
     A reply that still doesn't parse (now and then the model mangles nested JSON) is asked for once
     more.
     """
-    name = convert_to_openai_tool(schema)["function"]["name"]
 
-    def parse(message: AIMessage) -> SchemaT:
-        return parse_structured(message, schema, tool_name=name)
+    def execute(prompt: Any) -> SchemaT:
+        def discard(value: dict[str, Any], reset: bool = False) -> None:
+            pass
 
-    chain = model.bind_tools([schema], tool_choice="auto") | RunnableLambda(parse)
-    # ValueError covers pydantic's ValidationError and json.JSONDecodeError. Nothing to wait out: retry
-    # at once.
-    return chain.with_retry(
-        retry_if_exception_type=(ValueError,), stop_after_attempt=2, wait_exponential_jitter=False
-    )
+        return stream_structured(model, prompt, schema, preview_callback.get() or discard)
+
+    return RunnableLambda(execute)
 
 
 def parse_structured[SchemaT: BaseModel](
@@ -196,3 +197,56 @@ def output_meta(run_kind: str, agent_version: str, model_name: str) -> OutputMet
         model=model_name,
         prompt_version=PROMPT_VERSIONS[run_kind],
     )
+
+
+def stream_structured[SchemaT: BaseModel](
+    model: BaseChatModel,
+    prompt: Any,
+    schema: type[SchemaT],
+    preview: Preview,
+) -> SchemaT:
+    """Stream provisional structured content; validate the complete response before returning.
+
+    Retains the same auto-tool choice and one parsing retry as structured(). No model JSON is
+    presented as conversational text. A retry resets the preview rather than appending to it.
+    """
+    from langchain_core.messages import AIMessageChunk, message_chunk_to_message
+    from langchain_core.utils.json import parse_partial_json
+
+    name = convert_to_openai_tool(schema)["function"]["name"]
+    bound = model.bind_tools([schema], tool_choice="auto")
+    for attempt in range(2):
+        if attempt:
+            preview({}, True)
+        combined: AIMessageChunk | None = None
+        whole: AIMessage | None = None
+        for chunk in bound.stream(prompt):
+            if not isinstance(chunk, AIMessageChunk):
+                whole = chunk
+                continue
+            combined = chunk if combined is None else combined + chunk
+            raw = "".join(
+                str(c.get("args") or "") for c in combined.tool_call_chunks if c.get("name") == name
+            )
+            if not raw:
+                raw = combined.text
+            try:
+                partial = parse_partial_json(raw)
+                if isinstance(partial, dict):
+                    preview(partial, False)
+            except (ValueError, TypeError):
+                pass
+        try:
+            if combined is not None:
+                message = message_chunk_to_message(combined)
+                assert isinstance(message, AIMessage)
+                whole = message
+            if whole is None:
+                raise ValueError("The model returned no content")
+            result = parse_structured(whole, schema, tool_name=name)
+            preview(result.model_dump(mode="json"), False)
+            return result
+        except ValueError:
+            if attempt:
+                raise
+    raise ValueError("No usable structured output")

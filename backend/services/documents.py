@@ -220,7 +220,11 @@ async def update_field(
     await db.execute(
         statement.on_conflict_do_update(
             index_elements=[DocumentField.document_id, DocumentField.field_path],
-            set_={**values, "updated_at": datetime.now(UTC)},
+            set_={
+                **values,
+                "updated_at": datetime.now(UTC),
+                "revision": DocumentField.revision + 1,
+            },
         )
     )
     if field_path == f"{document.document_type}.title":
@@ -247,7 +251,7 @@ async def update_field(
 def suggestion_for(run: AgentRun, field_path: str) -> dict[str, Any] | None:
     """The suggested field from a succeeded enhance_field run, as stored in ``response_payload``."""
     if (
-        run.run_kind != "enhance_field"
+        run.run_kind not in ("enhance_field", "generate")
         or run.status != RunStatus.SUCCEEDED
         or not run.response_payload
     ):

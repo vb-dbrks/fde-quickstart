@@ -8,21 +8,26 @@ import logging
 import platform
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agents.config import AgentSettings
 from backend.agents.runtime import AgentRuntime
 from backend.agents.server import build_runtime, create_agent_app
-from backend.api import api_router
-from backend.contracts.field_catalog import load_field_catalog
+from backend.api import build_api_router
+from backend.api import interactions as interaction_api
+from backend.contracts.field_catalog import FieldCatalog, load_field_catalog
 from backend.db import migrations
 from backend.db.session import create_db_engine, create_sessionmaker
 from backend.domain.errors import DomainError
+from backend.examples.registry import applications
 from backend.middleware.idempotency import IdempotencyMiddleware
+from backend.services import interactions
 from backend.services.agent_client import AgentClient
-from backend.services.agent_runs import RunDeps, refresh_run
+from backend.services.agent_runs import RunDeps, queued_grace
 from backend.services.notification_channels import build_channels
 from backend.services.notifications import Notifier
 from backend.settings import Settings
@@ -51,7 +56,9 @@ def create_app(
 
         runtime = None
         if settings.agent_transport == "inprocess":
-            runtime = agent_runtime or build_runtime()
+            runtime = agent_runtime or build_runtime(
+                AgentSettings(enabled_examples=settings.enabled_examples)
+            )
             client = AgentClient.in_process(
                 create_agent_app(runtime), timeout=settings.agent_request_timeout_seconds
             )
@@ -68,13 +75,33 @@ def create_app(
 
         deps = RunDeps(
             client=client,
-            catalog=load_field_catalog(),
+            catalog=load_field_catalog()
+            if "documents" in settings.examples
+            else FieldCatalog("disabled", {}),
             settings=settings,
             notifier=app.state.notifier,
         )
 
         async def refresh(db: AsyncSession, run_id: str) -> object:
-            return await refresh_run(db, deps, run_id)
+            from backend.domain.models import AgentRun
+
+            run = await db.get(AgentRun, run_id)
+            if run is not None and run.contract_version == "v2":
+                return await interactions.refresh(
+                    db,
+                    app.state.agent_client,
+                    run_id,
+                    app.state.agent_applications,
+                    settings.agent_run_timeout_seconds,
+                    queued_grace(settings).total_seconds(),
+                )
+            from backend.examples.document_events import refresh_document_events
+
+            return await refresh_document_events(
+                db, replace(deps, client=app.state.agent_client), run_id
+            )
+
+        app.state.refresh_run = refresh
 
         poller = AgentRunPoller(
             sessions, refresh, interval_seconds=settings.poller_interval_seconds
@@ -105,6 +132,7 @@ def create_app(
         openapi_url="/api/openapi.json",
     )
     app.state.settings = settings
+    app.state.agent_applications = applications(settings.examples)
     app.state.notifier = Notifier(build_channels(settings.notification_webhook_url))
     app.add_middleware(IdempotencyMiddleware)
 
@@ -112,6 +140,7 @@ def create_app(
     async def domain_error(request: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse({"detail": exc.message}, status_code=exc.status_code)
 
-    app.include_router(api_router, prefix="/api")
+    app.include_router(build_api_router(settings.examples), prefix="/api")
+    app.include_router(interaction_api.router, prefix="/api")
     mount_spa(app, settings.static_dir)
     return app

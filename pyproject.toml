@@ -5,6 +5,7 @@ description = "Databricks App quick-start: FastAPI + React on Lakebase Postgres,
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "ag-ui-protocol==0.1.19",
     "alembic>=1.16",
     "databricks-langchain>=0.20",
     "databricks-sdk>=0.81",

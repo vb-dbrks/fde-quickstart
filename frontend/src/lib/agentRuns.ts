@@ -1,3 +1,4 @@
+import { useInteraction } from "@/agent/AgentProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
@@ -29,6 +30,13 @@ export function useAgentRun(
   { onSettled }: { onSettled?: (run: AgentRun) => void } = {},
 ) {
   const queryClient = useQueryClient();
+  const interaction = useInteraction(runId);
+  useEffect(() => {
+    if (runId && interaction.finished) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agentRun(runId) });
+      void queryClient.invalidateQueries({ queryKey: ["document-proposals"] });
+    }
+  }, [runId, interaction.finished, queryClient]);
   const query = useQuery({
     queryKey: queryKeys.agentRun(runId ?? ""),
     queryFn: () =>
@@ -55,6 +63,7 @@ export function useAgentRun(
     settled.current = run.id;
     void queryClient.invalidateQueries({ queryKey: queryKeys.document(run.document_id) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.documents });
+    void queryClient.invalidateQueries({ queryKey: ["document-proposals"] });
     void queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
     if (run.thread_id) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages(run.thread_id) });

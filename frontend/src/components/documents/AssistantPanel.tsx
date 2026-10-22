@@ -1,3 +1,6 @@
+import { useMemo } from "react";
+import { useInteraction } from "@/agent/AgentProvider";
+import { ToolActions } from "@/agent/ToolActions";
 import { Bot, MessageSquarePlus, Send } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -112,6 +115,27 @@ function Conversation({
   onRunStarted: (runId: string) => void;
   onThreadCreated: (threadId: string) => void;
 }) {
+  const interaction = useInteraction(runId);
+  const tools = useMemo(
+    () => ({
+      focus_field: {
+        execute: (args: Record<string, unknown>) => {
+          if (typeof args.field_path !== "string") return;
+          const element = globalThis.document.getElementById(`field-${args.field_path}`);
+          if (!element) return;
+          const url = new URL(window.location.href);
+          url.searchParams.delete("tab");
+          window.history.replaceState(null, "", url);
+          globalThis.document
+            .querySelector<HTMLButtonElement>('[role="tab"][aria-controls*="fields"]')
+            ?.click();
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+          element.focus();
+        },
+      },
+    }),
+    [],
+  );
   const [message, setMessage] = useState("");
   const messages = useMessages(threadId);
   const createThread = useCreateThread(documentId);
@@ -150,6 +174,7 @@ function Conversation({
 
   return (
     <div className="space-y-4">
+      {runId && <ToolActions runId={runId} interaction={interaction} tools={tools} />}
       <ol aria-label="Messages" aria-live="polite" className="space-y-3">
         {messages.data?.map((item) => (
           <li
@@ -170,6 +195,10 @@ function Conversation({
         {run && !isTerminal(run.status) && (
           <li className="max-w-[85%] rounded-lg bg-muted/50 px-3 py-2">
             <RunProgress run={run} />
+            {typeof (interaction.state.preview as { content?: unknown } | undefined)?.content ===
+              "string" && (
+              <p>{String((interaction.state.preview as { content: string }).content)}</p>
+            )}
           </li>
         )}
         {run?.status === "failed" && (

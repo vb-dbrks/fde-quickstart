@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any, ParamSpec, TypeVar
 
+from backend.agents.interaction import InteractionRuntime
 from backend.agents.tracing import NoopTracer, RunTracer, TraceHandle
 from backend.contracts.agent_contract_v1 import (
     STEP_VOCABULARY,
@@ -115,6 +116,8 @@ class AgentRuntime:
         self._runners = dict(runners)
         self._catalog = catalog
         self._executor = executor
+        self.executor = executor
+        self.interactions = InteractionRuntime({}, executor)
         self._tracer = tracer or NoopTracer()
         self._runner_names = dict(runner_names or {})
         self._max_runs_kept = max_runs_kept
@@ -170,6 +173,16 @@ class AgentRuntime:
         for run_id in terminal[:excess]:
             del self._runs[run_id]
 
+    def emit_preview(self, run_id: str, value: dict[str, Any], reset: bool = False) -> None:
+        from ag_ui.core import EventType, StateSnapshotEvent
+
+        event = StateSnapshotEvent(
+            type=EventType.STATE_SNAPSHOT, snapshot={"preview": value, "provisional": True}
+        ).model_dump(mode="json", by_alias=True, exclude_none=True)
+        with self._lock:
+            current = self._runs[run_id]
+            self._runs[run_id] = current.model_copy(update={"events": [*current.events, event]})
+
     def _execute(self, request: AgentRunRequest) -> None:
         run_id = request.app_agent_run_id
         self._update(run_id, status="running")
@@ -177,6 +190,12 @@ class AgentRuntime:
             STEP_VOCABULARY[request.run_kind],
             on_change=lambda history: self._update(run_id, step_history=history),
         )
+        from backend.agents.runners._common import preview_callback
+
+        def preview(value: dict[str, Any], reset: bool) -> None:
+            self.emit_preview(run_id, value, reset)
+
+        token = preview_callback.set(preview)
         handle = TraceHandle()
         try:
             with self._tracer.trace(request) as handle:
@@ -205,6 +224,8 @@ class AgentRuntime:
                 ),
             )
             return
+        finally:
+            preview_callback.reset(token)
         self._finish(run_id, steps, handle, output=output)
 
     def record_feedback(self, feedback: FeedbackRequest) -> FeedbackResult:

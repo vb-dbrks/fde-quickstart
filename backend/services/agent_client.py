@@ -31,6 +31,7 @@ from backend.contracts.agent_contract_v1 import (
     FeedbackRequest,
     FeedbackResult,
 )
+from backend.contracts.execution import AgentDescriptor, ExecutionRequest, ExecutionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,27 @@ class AgentClient:
 
     async def poll(self, run_id: str) -> AgentRunStatus:
         return self._status(await self._request("GET", f"/agent/run/{run_id}"))
+
+    async def definitions(self) -> list[AgentDescriptor]:
+        try:
+            response = await self._request("GET", "/agent/v2/definitions")
+            return [AgentDescriptor.model_validate(item) for item in response.json()]
+        except AgentRemoteError as exc:
+            if exc.status_code == 404:
+                raise AgentContractError(
+                    "This agent does not support execution v2. Deploy the matching runtime."
+                ) from exc
+            raise
+
+    async def submit_execution(self, request: ExecutionRequest) -> ExecutionStatus:
+        response = await self._request(
+            "POST", "/agent/v2/runs", json=request.model_dump(mode="json")
+        )
+        return ExecutionStatus.model_validate(response.json())
+
+    async def poll_execution(self, run_id: str, after: int) -> ExecutionStatus:
+        response = await self._request("GET", f"/agent/v2/runs/{run_id}", params={"after": after})
+        return ExecutionStatus.model_validate(response.json())
 
     async def send_feedback(self, feedback: FeedbackRequest) -> FeedbackResult:
         """Have the agent store a user's feedback on the run's trace (contract section 7)."""

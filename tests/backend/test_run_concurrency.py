@@ -3,21 +3,64 @@
 from collections.abc import Awaitable, Callable
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.auth.principal import Principal
 from backend.contracts.agent_contract_v1 import AgentRunRequest, AgentRunStatus
 from backend.contracts.field_catalog import load_field_catalog
 from backend.domain.models import AgentRun, Document, DocumentVersion, Notification
+from backend.services import documents
 from backend.services.agent_client import AgentClient
 from backend.services.agent_runs import RunDeps, queued_grace, refresh_run
 from backend.services.materialise import materialise_generate
 from backend.settings import Settings
-from tests.backend.test_agent_runs import start
+from tests.backend.test_agent_runs import accept_draft, poll, start
 from tests.conftest import create_brief
+from tests.helpers import as_user
 
 Hook = Callable[[str], Awaitable[None]]
+
+
+async def test_edit_during_context_preparation_makes_proposal_stale(
+    client: httpx.AsyncClient, editor: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    document = await create_brief(client)
+    field_url = f"/api/documents/{document['id']}/fields/brief.summary"
+    assert (
+        await client.patch(field_url, json={"value": "Original context"}, headers=as_user(editor))
+    ).status_code == 200
+    original = documents.accessible_documents
+
+    async def edit_before_loading_sources(
+        db: AsyncSession, principal: Principal, ids: list[str]
+    ) -> list[Document]:
+        response = await client.patch(
+            field_url, json={"value": "Newer manual edit"}, headers=as_user(editor)
+        )
+        assert response.status_code == 200
+        return await original(db, principal, ids)
+
+    monkeypatch.setattr(documents, "accessible_documents", edit_before_loading_sources)
+    run = await poll(
+        client, (await start(client, document["id"], scope=["brief.summary"])).json()["id"]
+    )
+    proposals = (
+        await client.get(f"/api/documents/{document['id']}/proposals", headers=as_user(editor))
+    ).json()
+    assert proposals[0]["before"] == "Original context"
+    review = await client.post(
+        f"/api/documents/{document['id']}/proposals/{run['id']}/review",
+        json={"accept": {"brief.summary": proposals[0]["output"]["value"]}},
+        headers=as_user(editor),
+    )
+    assert review.status_code == 409
+    fresh = (await client.get(f"/api/documents/{document['id']}", headers=as_user(editor))).json()
+    assert next(f for f in fresh["fields"] if f["field_path"] == "brief.summary")["value"] == (
+        "Newer manual edit"
+    )
 
 
 class InterleavedClient(AgentClient):
@@ -65,6 +108,7 @@ async def test_a_run_finished_elsewhere_while_polling_is_not_materialised_twice(
     assert run is not None
     assert run.status == "succeeded"
 
+    await accept_draft(client, document["id"], run_id)
     async with sessions() as db:
         assert list(await db.scalars(select(DocumentVersion.version))) == [1]
         succeeded = select(func.count()).where(Notification.kind == "agent_run_succeeded")

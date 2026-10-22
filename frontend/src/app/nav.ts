@@ -1,4 +1,4 @@
-import { FileText, LayoutDashboard, ShieldCheck, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, type LucideIcon } from "lucide-react";
 
 import type { Permission } from "@/lib/api";
 
@@ -12,7 +12,6 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Home", icon: LayoutDashboard },
-  { to: "/documents", label: "Documents", icon: FileText },
   { to: "/admin/roles", label: "Users & roles", icon: ShieldCheck, permission: "roles:manage" },
 ];
 

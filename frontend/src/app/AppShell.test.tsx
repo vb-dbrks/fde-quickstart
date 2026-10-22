@@ -10,9 +10,11 @@ describe("app shell", () => {
     mockApi({ "/api/me": viewer, "/api/notifications": noNotifications, "/api/health": health });
     renderApp("/");
 
-    expect(await screen.findByRole("heading", { name: "Welcome, Vera Viewer" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Build your agentic application" }),
+    ).toBeVisible();
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getByRole("link", { name: "Documents" })).toBeVisible();
+    expect(await within(nav).findByRole("link", { name: "Documents" })).toBeVisible();
     expect(within(nav).queryByRole("link", { name: "Users & roles" })).not.toBeInTheDocument();
   });
 

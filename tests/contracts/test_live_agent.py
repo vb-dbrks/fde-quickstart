@@ -12,7 +12,9 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
 from backend.contracts.agent_contract_v1 import (
     AGENT_CONTRACT_VERSION,
@@ -73,3 +75,78 @@ async def _wait(agent: AgentClient, run_id: str, status: AgentRunStatus) -> Agen
             await asyncio.sleep(1)
             status = await agent.poll(run_id)
     return status
+
+
+@pytest.mark.parametrize(
+    ("agent_id", "payload"),
+    [("chat", {"message": "Hello"}), ("generation", {"topic": "AG-UI", "audience": "FDEs"})],
+)
+async def test_v2_runs_over_http(
+    agent: AgentClient, agent_id: str, payload: dict[str, str]
+) -> None:
+    from backend.contracts.execution import ExecutionRequest
+
+    run_id = str(uuid.uuid4())
+    assert agent_id in {definition.id for definition in await agent.definitions()}
+    request = ExecutionRequest(
+        run_id=run_id,
+        thread_id=run_id,
+        agent_id=agent_id,
+        initiator="smoke@example.com",
+        input=payload,
+    )
+    await agent.submit_execution(request)
+    await agent.submit_execution(request)
+    async with asyncio.timeout(RUN_TIMEOUT_SECONDS):
+        while True:
+            status = await agent.poll_execution(run_id, 0)
+            if status.status in ("succeeded", "failed"):
+                break
+            await asyncio.sleep(0.1)
+    assert status.status == "succeeded", status.error
+    assert status.result
+    assert status.events
+    assert (await agent.poll_execution(run_id, status.cursor)).events == []
+
+
+async def test_application_collects_and_reviews_a_standalone_http_run(
+    app: FastAPI, client: httpx.AsyncClient, editor: str
+) -> None:
+    from backend.main import create_app
+    from tests.helpers import as_user
+
+    settings = app.state.settings.model_copy(
+        update={"agent_transport": "http", "agent_api_base": BASE}
+    )
+    application = create_app(settings)
+    async with (
+        application.router.lifespan_context(application),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application), base_url="http://test"
+        ) as http,
+    ):
+        started = await http.post(
+            "/api/runs",
+            json={"agent_id": "generation", "input": {"topic": "HTTP transport"}},
+            headers=as_user(editor),
+        )
+        assert started.status_code == 202
+        run_id = started.json()["id"]
+        async with asyncio.timeout(RUN_TIMEOUT_SECONDS):
+            while True:
+                # Background collection uses this exact callback with no browser attached.
+                async with application.state.sessionmaker() as db:
+                    run = await application.state.refresh_run(db, run_id)
+                if run.status in ("succeeded", "failed"):
+                    break
+                await asyncio.sleep(0.1)
+        assert run.status == "succeeded"
+        replay = (await http.get(f"/api/runs/{run_id}/events", headers=as_user(editor))).json()
+        assert replay["events"][-1]["event"]["type"] == "RUN_FINISHED"
+        review = (await http.get(f"/api/runs/{run_id}/review", headers=as_user(editor))).json()
+        assert review["status"] == "pending"
+        assert (
+            await http.post(
+                f"/api/runs/{run_id}/review", json={"decision": "accepted"}, headers=as_user(editor)
+            )
+        ).status_code == 200

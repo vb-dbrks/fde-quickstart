@@ -8,6 +8,9 @@ A run kind is one thing the agent can do, such as `generate`. Adding one touches
 contract between them. Work in this order; each step leaves the tests passing. The example adds
 `review`: the agent reviews a document and returns comments.
 
+For new generic capabilities, use [the agent registration recipe](agentic-applications.md). The steps
+below describe the legacy v1 document interface only; do not extend it for independent applications.
+
 ## 1. The contract
 
 1. `contracts/agent-api-contract.md`: add the run kind to the request and response tables, its step

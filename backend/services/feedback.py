@@ -26,7 +26,15 @@ from backend.auth.principal import Principal
 from backend.contracts.agent_contract_v1 import FeedbackRequest, expectation_name
 from backend.domain.enums import FieldSource
 from backend.domain.errors import ConflictError, NotFoundError
-from backend.domain.models import AgentRun, Document, DocumentField, Feedback, Message, new_id
+from backend.domain.models import (
+    AgentRun,
+    Document,
+    DocumentFeedback,
+    DocumentField,
+    Feedback,
+    Message,
+    new_id,
+)
 from backend.services import assistant
 from backend.services.agent_client import AgentClient, AgentClientError, AgentRemoteError
 
@@ -66,7 +74,6 @@ async def record(
         insert(Feedback)
         .values(
             id=new_id(),
-            document_id=run.document_id,
             trace_id=run.mlflow_trace_id,
             value=value,
             reasons=reasons,
@@ -79,6 +86,9 @@ async def record(
         .on_conflict_do_nothing(constraint="uq_feedback_target")
         .returning(Feedback.id)
     )
+    if inserted is not None and run.document_id:
+        db.add(DocumentFeedback(feedback_id=inserted, document_id=run.document_id))
+        await db.flush()
     row = await db.scalar(
         select(Feedback)
         .filter_by(**key)
@@ -249,13 +259,13 @@ async def deliver(db: AsyncSession, client: AgentClient, feedback_id: str) -> No
         await db.commit()
         return
     run = await db.get(AgentRun, row.agent_run_id)
-    document = await db.get(Document, row.document_id)
-    if run is None or document is None or row.trace_id is None:
+    document = await db.get(Document, row.document_id) if row.document_id else None
+    if run is None or row.trace_id is None:
         row.sync_status = SKIPPED
         await db.commit()
         return
     try:
-        request = _request(row, run, document.document_type)
+        request = _request(row, run, document.document_type if document else run.agent_id)
     except ValueError as exc:  # it can never be sent as it is
         _retry_later(row, str(exc), permanent=True)
         await db.commit()

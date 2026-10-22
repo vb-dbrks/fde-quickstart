@@ -1,3 +1,4 @@
+import { ProposalsPanel } from "@/components/documents/ProposalsPanel";
 import { FileQuestion } from "lucide-react";
 import { useParams, useSearchParams } from "react-router";
 
@@ -76,6 +77,7 @@ function Workspace({ document }: { document: DocumentDetail }) {
           )
         }
       />
+      <ProposalsPanel documentId={document.id} canEdit={canEdit} />
       <Tabs
         value={tab}
         onValueChange={(value) => setParams(value === "fields" ? {} : { tab: value })}

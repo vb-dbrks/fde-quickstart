@@ -12,6 +12,8 @@ RunnerChoice = Literal["fake", "real"]
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    enabled_examples: str = "chat,generation,documents"
+
     agent_version: str = "0.1.0"
     # Model Serving endpoint for the real runners (e.g. a Foundation Model API endpoint).
     llm_endpoint: str | None = None
@@ -50,14 +52,26 @@ class AgentSettings(BaseSettings):
             return "fake" if choice == "fake" else "real"
         return "real" if self.llm_endpoint else "fake"
 
-    def check(self) -> None:
+    def check(self, agent_examples: dict[str, str] | None = None) -> None:
         """Refuse settings that would silently do the wrong thing."""
-        unknown = sorted(set(self.overrides()) - set(RUN_KINDS))
+        agent_examples = (
+            agent_examples
+            if agent_examples is not None
+            else {"chat": "chat", "generation": "generation"}
+        )
+        unknown = sorted(set(self.overrides()) - set(RUN_KINDS) - agent_examples.keys())
         if unknown:
             raise RuntimeError(f"AGENT_RUNNER_OVERRIDES names unknown run kinds: {unknown}")
+        enabled = {name.strip() for name in self.enabled_examples.split(",")}
+        active = [
+            *(RUN_KINDS if "documents" in enabled else ()),
+            *(name for name, example in agent_examples.items() if example in enabled),
+        ]
+        if any(self.runner_for(kind) == "real" for kind in active) and not self.llm_endpoint:
+            raise RuntimeError("AGENT_RUNNER=real needs LLM_ENDPOINT (a Model Serving endpoint).")
         implicit_fake = [
             kind
-            for kind in RUN_KINDS
+            for kind in active
             if self.runner_for(kind) == "fake"
             and "fake" not in (self.overrides().get(kind), self.agent_runner)
         ]

@@ -11,9 +11,21 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    select,
+)
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql.elements import ColumnElement
 
 from backend.db.base import Base
 
@@ -49,6 +61,7 @@ class DocumentField(Base):
         ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
     )
     field_path: Mapped[str] = mapped_column(String(200), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     value: Mapped[Any] = mapped_column(JSONB, nullable=True)
     source: Mapped[str] = mapped_column(String(16))
     confidence: Mapped[str | None] = mapped_column(String(16))
@@ -116,11 +129,34 @@ class AgentRun(Base):
     __table_args__ = (Index("ix_agent_runs_status_last_polled_at", "status", "last_polled_at"),)
 
     id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True, default=new_id)
-    document_id: Mapped[str] = mapped_column(
-        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    document_binding: Mapped["DocumentRun | None"] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", uselist=False
     )
+
+    @hybrid_property
+    def document_id(self) -> str:
+        """Compatibility accessor; generic records have no document association."""
+        return self.document_binding.document_id if self.document_binding else ""
+
+    @document_id.inplace.setter
+    def _set_document_id(self, value: str) -> None:
+        self.document_binding = DocumentRun(document_id=value) if value else None
+
+    @document_id.inplace.expression
+    @classmethod
+    def _document_id_expression(cls) -> ColumnElement[str]:
+        return select(DocumentRun.document_id).where(DocumentRun.run_id == cls.id).scalar_subquery()
+
     thread_id: Mapped[str | None] = mapped_column(ForeignKey("threads.id", ondelete="CASCADE"))
-    run_kind: Mapped[str] = mapped_column(String(32))
+    run_kind: Mapped[str] = mapped_column(String(100))
+    agent_id: Mapped[str] = mapped_column(
+        String(100), default="documents", server_default="documents"
+    )
+    contract_version: Mapped[str] = mapped_column(String(8), default="v1", server_default="v1")
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    runtime_cursor: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    event_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    review_required: Mapped[bool] = mapped_column(default=False, server_default="false")
     status: Mapped[str] = mapped_column(String(16))
     triggered_by: Mapped[str] = mapped_column(String(EMAIL_LENGTH))
     request_payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
@@ -143,8 +179,30 @@ class Thread(Base):
     __tablename__ = "threads"
 
     id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True, default=new_id)
-    document_id: Mapped[str] = mapped_column(
-        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    document_binding: Mapped["DocumentThread | None"] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", uselist=False
+    )
+
+    @hybrid_property
+    def document_id(self) -> str:
+        """Compatibility accessor; generic records have no document association."""
+        return self.document_binding.document_id if self.document_binding else ""
+
+    @document_id.inplace.setter
+    def _set_document_id(self, value: str) -> None:
+        self.document_binding = DocumentThread(document_id=value) if value else None
+
+    @document_id.inplace.expression
+    @classmethod
+    def _document_id_expression(cls) -> ColumnElement[str]:
+        return (
+            select(DocumentThread.document_id)
+            .where(DocumentThread.thread_id == cls.id)
+            .scalar_subquery()
+        )
+
+    agent_id: Mapped[str] = mapped_column(
+        String(100), default="documents.assistant_turn", server_default="documents.assistant_turn"
     )
     owner: Mapped[str] = mapped_column(String(EMAIL_LENGTH))
     title: Mapped[str] = mapped_column(String(200))
@@ -181,9 +239,28 @@ class Feedback(Base):
     )
 
     id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True, default=new_id)
-    document_id: Mapped[str] = mapped_column(
-        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    document_binding: Mapped["DocumentFeedback | None"] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", uselist=False
     )
+
+    @hybrid_property
+    def document_id(self) -> str:
+        """Compatibility accessor; generic records have no document association."""
+        return self.document_binding.document_id if self.document_binding else ""
+
+    @document_id.inplace.setter
+    def _set_document_id(self, value: str) -> None:
+        self.document_binding = DocumentFeedback(document_id=value) if value else None
+
+    @document_id.inplace.expression
+    @classmethod
+    def _document_id_expression(cls) -> ColumnElement[str]:
+        return (
+            select(DocumentFeedback.document_id)
+            .where(DocumentFeedback.feedback_id == cls.id)
+            .scalar_subquery()
+        )
+
     agent_run_id: Mapped[str] = mapped_column(ForeignKey("agent_runs.id", ondelete="CASCADE"))
     # Copied from the run; null when the run was not traced (then there is nothing to deliver).
     trace_id: Mapped[str | None] = mapped_column(String(64))
@@ -250,3 +327,76 @@ class Notification(Base):
     link: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DocumentRun(Base):
+    __tablename__ = "document_runs"
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+
+
+class DocumentThread(Base):
+    __tablename__ = "document_threads"
+    thread_id: Mapped[str] = mapped_column(
+        ForeignKey("threads.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+
+
+class DocumentFeedback(Base):
+    __tablename__ = "document_feedback"
+    feedback_id: Mapped[str] = mapped_column(
+        ForeignKey("feedback.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+
+
+class RunEvent(Base):
+    __tablename__ = "run_events"
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+class ToolOutcome(Base):
+    __tablename__ = "tool_outcomes"
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_call_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+class GenerationArtifact(Base):
+    __tablename__ = "generation_artifacts"
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+class FieldProposal(Base):
+    __tablename__ = "field_proposals"
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    field_path: Mapped[str] = mapped_column(String(200), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    base_revision: Mapped[int] = mapped_column(Integer)
+    before: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    output: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    accepted_value: Mapped[Any] = mapped_column(JSONB, nullable=True)

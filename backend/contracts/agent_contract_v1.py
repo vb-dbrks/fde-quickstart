@@ -14,7 +14,9 @@ same pull request - tests/contracts fail otherwise.
 
 from typing import Any, Literal, Self, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from backend.contracts.execution import AGUI_EVENT
 
 AGENT_CONTRACT_VERSION = "v1"
 
@@ -182,7 +184,13 @@ class OutputMeta(_ContractModel):
     prompt_version: str | None = None
 
 
+class UIAction(_ContractModel):
+    name: Literal["focus_field"] = "focus_field"
+    field_path: str
+
+
 class AgentOutput(_ContractModel):
+    ui_action: UIAction | None = None
     # generate: the generated fields; enhance_field: exactly one suggested field.
     fields: list[OutputField] = Field(default_factory=list)
     # assistant_turn only.
@@ -197,6 +205,18 @@ class AgentError(_ContractModel):
 
 
 class AgentRunStatus(_ContractModel):
+    events: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("events")
+    @classmethod
+    def validate_events(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            AGUI_EVENT.validate_python(event).model_dump(
+                mode="json", by_alias=True, exclude_none=True
+            )
+            for event in value
+        ]
+
     contract_version: Literal["v1"] = "v1"
     app_agent_run_id: str
     run_kind: AgentRunKind

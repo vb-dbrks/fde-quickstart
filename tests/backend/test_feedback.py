@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.domain.models import Feedback
+from backend.domain.models import AgentRun, Feedback
 from backend.services import feedback as feedback_service
 from tests.backend.test_agent_runs import poll, start
 from tests.conftest import create_brief
@@ -24,9 +24,18 @@ def tracer(app: FastAPI, client: httpx.AsyncClient) -> RecordingTracer:
     return recording
 
 
-async def generated_brief(client: httpx.AsyncClient) -> tuple[dict[str, Any], str]:
+async def generated_brief(
+    client: httpx.AsyncClient, sessions: async_sessionmaker[AsyncSession]
+) -> tuple[dict[str, Any], str]:
     document = await create_brief(client)
-    run = await poll(client, (await start(client, document["id"])).json()["id"])
+    run_id = (await start(client, document["id"])).json()["id"]
+    # Outstanding pre-migration runs retain their recorded automatic materialisation behaviour.
+    async with sessions() as db:
+        await db.execute(
+            update(AgentRun).where(AgentRun.id == run_id).values(review_required=False)
+        )
+        await db.commit()
+    run = await poll(client, run_id)
     return document, run["id"]
 
 
@@ -45,13 +54,45 @@ async def rows(sessions: async_sessionmaker[AsyncSession]) -> list[Feedback]:
         return list(await db.scalars(select(Feedback).order_by(Feedback.created_at)))
 
 
+async def test_viewer_cannot_dismiss_a_shared_proposal(
+    client: httpx.AsyncClient, editor: str, sessions: async_sessionmaker[AsyncSession]
+) -> None:
+    document = await create_brief(client)
+    run = await poll(
+        client,
+        (
+            await start(
+                client, document["id"], run_kind="enhance_field", field_path="brief.summary"
+            )
+        ).json()["id"],
+    )
+    shared = await client.put(
+        f"/api/documents/{document['id']}/access",
+        json={"email": VIEWER, "access": "view"},
+        headers=as_user(editor),
+    )
+    assert shared.status_code == 200
+    url = f"/api/agent-runs/{run['id']}/dismiss"
+    assert (await client.post(url, headers=as_user(VIEWER))).status_code == 403
+    proposals = (
+        await client.get(f"/api/documents/{document['id']}/proposals", headers=as_user(editor))
+    ).json()
+    assert len(proposals) == 1
+    assert proposals[0]["status"] == "pending"
+    assert await rows(sessions) == []
+    assert (await client.post(url, headers=as_user(editor))).status_code == 204
+    assert (
+        await client.get(f"/api/documents/{document['id']}/proposals", headers=as_user(editor))
+    ).json() == []
+
+
 async def test_a_field_rating_reaches_the_trace(
     client: httpx.AsyncClient,
     editor: str,
     tracer: RecordingTracer,
     sessions: async_sessionmaker[AsyncSession],
 ) -> None:
-    document, run_id = await generated_brief(client)
+    document, run_id = await generated_brief(client, sessions)
     response = await rate(
         client,
         document["id"],
@@ -97,7 +138,7 @@ async def test_changing_a_rating_replaces_the_one_on_the_trace(
     tracer: RecordingTracer,
     sessions: async_sessionmaker[AsyncSession],
 ) -> None:
-    document, _ = await generated_brief(client)
+    document, _ = await generated_brief(client, sessions)
     await rate(client, document["id"], "brief.summary")
     await rate(client, document["id"], "brief.summary")  # same rating again: nothing new to send
     await rate(client, document["id"], "brief.summary", rating=True, reasons=["accurate"])
@@ -111,9 +152,12 @@ async def test_changing_a_rating_replaces_the_one_on_the_trace(
 
 
 async def test_only_values_the_agent_wrote_can_be_rated(
-    client: httpx.AsyncClient, editor: str, tracer: RecordingTracer
+    client: httpx.AsyncClient,
+    editor: str,
+    tracer: RecordingTracer,
+    sessions: async_sessionmaker[AsyncSession],
 ) -> None:
-    document, _ = await generated_brief(client)
+    document, _ = await generated_brief(client, sessions)
     assert (await rate(client, document["id"], "brief.goal")).status_code == 409
     response = await rate(client, document["id"], "brief.summary", reasons=["not_a_reason"])
     assert response.status_code == 422
@@ -148,9 +192,12 @@ async def test_accepting_and_dismissing_suggestions_are_verdicts(
 
 
 async def test_editing_a_value_the_agent_wrote_records_the_correction(
-    client: httpx.AsyncClient, editor: str, tracer: RecordingTracer
+    client: httpx.AsyncClient,
+    editor: str,
+    tracer: RecordingTracer,
+    sessions: async_sessionmaker[AsyncSession],
 ) -> None:
-    document, run_id = await generated_brief(client)
+    document, run_id = await generated_brief(client, sessions)
     url = f"/api/documents/{document['id']}/fields"
     await client.patch(f"{url}/brief.risks", json={"value": ["Real risk"]}, headers=as_user(editor))
     await client.patch(f"{url}/brief.goal", json={"value": "New goal"}, headers=as_user(editor))
@@ -212,7 +259,7 @@ async def test_feedback_on_untraced_runs_stays_in_the_app(
     client: httpx.AsyncClient, editor: str, sessions: async_sessionmaker[AsyncSession]
 ) -> None:
     """Locally (no MLflow) runs have no trace: feedback is kept, with nothing to deliver."""
-    document, _ = await generated_brief(client)
+    document, _ = await generated_brief(client, sessions)
     assert (await rate(client, document["id"], "brief.summary")).status_code == 200
     [row] = await rows(sessions)
     assert (row.trace_id, row.sync_status) == (None, "skipped")
@@ -225,7 +272,7 @@ async def test_undelivered_feedback_is_retried_with_backoff(
     tracer: RecordingTracer,
     sessions: async_sessionmaker[AsyncSession],
 ) -> None:
-    document, _ = await generated_brief(client)
+    document, _ = await generated_brief(client, sessions)
     tracer.fail = True  # the trace store is down
     await rate(client, document["id"], "brief.summary")
     [row] = await rows(sessions)
@@ -253,7 +300,7 @@ async def test_feedback_that_breaks_the_contract_is_not_retried(
     tracer: RecordingTracer,
     sessions: async_sessionmaker[AsyncSession],
 ) -> None:
-    document, _ = await generated_brief(client)
+    document, _ = await generated_brief(client, sessions)
     await rate(client, document["id"], "brief.summary")
     async with sessions() as db:  # a value the contract rejects: ratings are booleans
         await db.execute(update(Feedback).values(value="great", sync_status="pending"))

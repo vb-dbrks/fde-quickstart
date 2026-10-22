@@ -22,6 +22,7 @@ from backend.contracts.agent_contract_v1 import (
     Citation,
     OutputField,
     OutputMeta,
+    UIAction,
 )
 from backend.contracts.field_catalog import FieldCatalog, FieldSpec
 from backend.contracts.validation import requested_fields
@@ -58,6 +59,14 @@ class FakeAgent:
                     spec, self._draft(spec, title), request, "Drafted from the title and goal."
                 )
             )
+        from backend.agents.runners._common import preview_callback
+
+        callback = preview_callback.get()
+        if callback:
+            for i in range(1, len(fields) + 1):
+                callback({"fields": [f.model_dump(mode="json") for f in fields[:i]]}, False)
+                if self.step_seconds:
+                    time.sleep(self.step_seconds / 4)
         return AgentOutput(fields=fields, meta=self._meta())
 
     def enhance_field(self, request: AgentRunRequest, steps: Steps) -> AgentOutput:
@@ -89,7 +98,17 @@ class FakeAgent:
             f"{len(context.history)} earlier messages and {len(request.source_documents)} source "
             f"documents for “{self._title(request)}”."
         )
+        doc_type = self.catalog.get(request.document_context.document_type)
+        focus = (
+            next(
+                (f.path for f in doc_type.fields if f.label.lower() in context.message.lower()),
+                None,
+            )
+            if doc_type
+            else None
+        )
         return AgentOutput(
+            ui_action=UIAction(field_path=focus) if focus else None,
             answer=AssistantAnswer(content=content, citations=self._citations(request)),
             meta=self._meta(),
         )

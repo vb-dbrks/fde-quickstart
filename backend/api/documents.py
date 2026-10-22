@@ -117,6 +117,21 @@ async def update_field(
         accepted_run = await db.get(AgentRun, payload.accepted_from_run_id)
         if accepted_run is None or accepted_run.document_id != document.id:
             raise NotFoundError("Run not found")
+    if accepted_run is not None and accepted_run.review_required:
+        from backend.examples.proposals import ProposalReview, apply_review
+
+        await apply_review(
+            db,
+            principal,
+            document,
+            accepted_run,
+            catalog,
+            ProposalReview(accept={field_path: payload.value}),
+        )
+        await db.commit()
+        deliver_feedback()
+        rows = await documents.field_rows(db, document.id)
+        return field_out(field_path, catalog, document, rows[field_path])
     row = await documents.update_field(
         db,
         catalog,

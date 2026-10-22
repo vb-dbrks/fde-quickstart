@@ -25,6 +25,7 @@ const sidebars: SidebarsConfig = {
             "architecture/adr/0008-notifications-by-polling",
             "architecture/adr/0009-migrations-at-startup",
             "architecture/adr/0010-user-feedback-on-traces",
+            "architecture/adr/0011-generic-ag-ui-interactions",
           ],
         },
       ],
@@ -35,6 +36,8 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         "guides/getting-started",
+        "guides/agentic-applications",
+        "guides/ag-ui-verification",
         "guides/agent-contract",
         "guides/adding-a-run-kind",
         "guides/adding-a-document-type",

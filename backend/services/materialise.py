@@ -60,6 +60,7 @@ async def materialise_generate(
             row = DocumentField(document_id=document.id, field_path=field.field_path)
             db.add(row)
             rows[field.field_path] = row
+        row.revision = (row.revision or 0) + 1
         row.value = value
         row.source = FieldSource.AGENT.value
         row.confidence = field.confidence
