@@ -16,7 +16,12 @@ from backend.agents.runners._common import (
     to_json,
 )
 from backend.agents.runtime import AgentRunFailed, RunFn, Steps
-from backend.contracts.agent_contract_v1 import AgentOutput, AgentRunRequest, AssistantAnswer
+from backend.contracts.agent_contract_v1 import (
+    AgentOutput,
+    AgentRunRequest,
+    AssistantAnswer,
+    UIAction,
+)
 from backend.contracts.field_catalog import FieldCatalog
 
 PROMPT = ChatPromptTemplate.from_messages(
@@ -25,6 +30,10 @@ PROMPT = ChatPromptTemplate.from_messages(
 
 
 class AssistantReply(BaseModel):
+    focus_field: str | None = Field(
+        default=None,
+        description="An existing document field path to focus when the user asks to show or locate a field; otherwise null.",
+    )
     content: str = Field(description="The answer, in plain text without Markdown.")
     citations: list[ModelCitation] = Field(default_factory=list)
 
@@ -66,7 +75,11 @@ def make_assistant_turn_runner(
             content=reply.content, citations=known_citations(reply.citations, request)
         )
         return AgentOutput(
-            answer=answer, meta=output_meta("assistant_turn", agent_version, model_name)
+            ui_action=UIAction(field_path=reply.focus_field)
+            if reply.focus_field and doc_type and doc_type.field(reply.focus_field)
+            else None,
+            answer=answer,
+            meta=output_meta("assistant_turn", agent_version, model_name),
         )
 
     return run

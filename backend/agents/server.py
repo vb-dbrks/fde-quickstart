@@ -15,7 +15,9 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from backend.agents.config import AgentSettings
+from backend.agents.example_registry import definitions
 from backend.agents.fake import FakeAgent
+from backend.agents.interaction import InteractionRuntime
 from backend.agents.llm import chat_model_factory
 from backend.agents.runners import real_runners
 from backend.agents.runtime import AgentRuntime, RequestRejected, RunFn
@@ -30,7 +32,8 @@ from backend.contracts.agent_contract_v1 import (
     FeedbackRequest,
     contract_document,
 )
-from backend.contracts.field_catalog import load_field_catalog
+from backend.contracts.execution import ExecutionRequest
+from backend.contracts.field_catalog import FieldCatalog, load_field_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +46,10 @@ def build_runtime(
 ) -> AgentRuntime:
     """Pick fake or real runners per run kind (AGENT_RUNNER / AGENT_RUNNER_OVERRIDES)."""
     settings = settings or AgentSettings()
-    settings.check()
-    catalog = load_field_catalog()
+    registered = definitions(settings)
+    settings.check({key: value.example for key, value in registered.items()})
+    enabled = {name.strip() for name in settings.enabled_examples.split(",")}
+    catalog = load_field_catalog() if "documents" in enabled else FieldCatalog("disabled", {})
     fake = FakeAgent(
         catalog,
         step_seconds=settings.fake_agent_step_seconds,
@@ -54,7 +59,7 @@ def build_runtime(
     ).runners()
     choices = settings.runner_choices()
     real: dict[AgentRunKind, RunFn] = {}
-    if "real" in choices.values():
+    if "real" in choices.values() and "documents" in enabled:
         if not settings.llm_endpoint:
             raise RuntimeError("AGENT_RUNNER=real needs LLM_ENDPOINT (a Model Serving endpoint).")
         real = real_runners(
@@ -63,8 +68,12 @@ def build_runtime(
             agent_version=settings.agent_version,
             model_name=settings.llm_endpoint,
         )
-    runners = {kind: (real[kind] if choices[kind] == "real" else fake[kind]) for kind in RUN_KINDS}
-    return AgentRuntime(
+    runners = (
+        {kind: (real[kind] if choices[kind] == "real" else fake[kind]) for kind in RUN_KINDS}
+        if "documents" in enabled
+        else {}
+    )
+    runtime = AgentRuntime(
         runners,
         catalog=catalog,
         executor=executor
@@ -73,6 +82,13 @@ def build_runtime(
         runner_names=choices,
         max_runs_kept=settings.agent_max_runs_kept,
     )
+    runtime.interactions = InteractionRuntime(
+        {k: v for k, v in registered.items() if v.example in enabled},
+        runtime.executor,
+        traced=bool(settings.mlflow_experiment_id),
+        max_runs=settings.agent_max_runs_kept,
+    )
+    return runtime
 
 
 def _error(code: str, message: str, http_status: int, *, retryable: bool = False) -> JSONResponse:
@@ -98,6 +114,28 @@ def create_agent_app(runtime: AgentRuntime | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.runtime = runtime
+
+    @app.get("/agent/v2/definitions")
+    async def list_definitions() -> list[dict[str, Any]]:
+        return [
+            d.descriptor().model_dump(mode="json")
+            for d in runtime.interactions.definitions.values()
+        ]
+
+    @app.post("/agent/v2/runs")
+    async def submit_execution(payload: ExecutionRequest) -> JSONResponse:
+        try:
+            result = runtime.interactions.submit(payload)
+        except ValueError as exc:
+            return _error("VALIDATION_ERROR", str(exc), 400)
+        return JSONResponse(result.model_dump(mode="json"))
+
+    @app.get("/agent/v2/runs/{run_id}")
+    async def poll_execution(run_id: str, after: int = 0) -> JSONResponse:
+        result = runtime.interactions.poll(run_id, max(0, after))
+        if result is None:
+            return _error("RUN_NOT_FOUND", "Run not found", 404)
+        return JSONResponse(result.model_dump(mode="json"))
 
     @app.post("/agent/run")
     async def submit_run(request: Request) -> JSONResponse:
@@ -148,7 +186,7 @@ def create_agent_app(runtime: AgentRuntime | None = None) -> FastAPI:
 
     @app.get("/contract")
     async def contract() -> dict[str, Any]:
-        return {**contract_document(), "field_catalog_version": load_field_catalog().version}
+        return {**contract_document(), "field_catalog_version": runtime._catalog.version}
 
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:

@@ -44,6 +44,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Notifications */
+        get: operations["list_notifications_api_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark Read */
+        post: operations["mark_read_api_notifications__notification_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark All Read */
+        post: operations["mark_all_read_api_notifications_read_all_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Roles
+         * @description The roles defined in code and the permissions each grants.
+         */
+        get: operations["list_roles_api_admin_roles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/role-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Role Assignments */
+        get: operations["list_role_assignments_api_admin_role_assignments_get"];
+        put?: never;
+        /** Grant Role */
+        post: operations["grant_role_api_admin_role_assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/role-assignments/{email}/{role}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Role */
+        delete: operations["revoke_role_api_admin_role_assignments__email___role__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/document-types": {
         parameters: {
             query?: never;
@@ -335,15 +441,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/notifications": {
+    "/api/documents/{document_id}/proposals": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Notifications */
-        get: operations["list_notifications_api_notifications_get"];
+        /** Proposals */
+        get: operations["proposals_api_documents__document_id__proposals_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -352,7 +458,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/notifications/{notification_id}/read": {
+    "/api/documents/{document_id}/proposals/{run_id}/review": {
         parameters: {
             query?: never;
             header?: never;
@@ -361,43 +467,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark Read */
-        post: operations["mark_read_api_notifications__notification_id__read_post"];
+        /** Review Proposals */
+        post: operations["review_proposals_api_documents__document_id__proposals__run_id__review_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/notifications/read-all": {
+    "/api/examples": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** Mark All Read */
-        post: operations["mark_all_read_api_notifications_read_all_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/roles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Roles
-         * @description The roles defined in code and the permissions each grants.
-         */
-        get: operations["list_roles_api_admin_roles_get"];
+        /** Examples */
+        get: operations["examples_api_examples_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -406,25 +492,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/role-assignments": {
+    "/api/agents": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Role Assignments */
-        get: operations["list_role_assignments_api_admin_role_assignments_get"];
+        /** Agents */
+        get: operations["agents_api_agents_get"];
         put?: never;
-        /** Grant Role */
-        post: operations["grant_role_api_admin_role_assignments_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/role-assignments/{email}/{role}": {
+    "/api/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sessions */
+        get: operations["sessions_api_sessions_get"];
+        put?: never;
+        /** Create Session */
+        post: operations["create_session_api_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Messages */
+        get: operations["messages_api_sessions__session_id__messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runs */
+        get: operations["runs_api_runs_get"];
+        put?: never;
+        /** Start Run */
+        post: operations["start_run_api_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events */
+        get: operations["events_api_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Review State */
+        get: operations["review_state_api_runs__run_id__review_get"];
+        put?: never;
+        /** Review */
+        post: operations["review_api_runs__run_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/feedback": {
         parameters: {
             query?: never;
             header?: never;
@@ -433,9 +623,60 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Rate */
+        post: operations["rate_api_runs__run_id__feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tool Outcomes */
+        get: operations["tool_outcomes_api_runs__run_id__tools_get"];
+        put?: never;
         post?: never;
-        /** Revoke Role */
-        delete: operations["revoke_role_api_admin_role_assignments__email___role__delete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/tools/{call_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tool Result */
+        post: operations["tool_result_api_runs__run_id__tools__call_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/tools/{call_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim Tool */
+        post: operations["claim_tool_api_runs__run_id__tools__call_id__claim_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -702,6 +943,28 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** InteractionOut */
+        InteractionOut: {
+            /** Id */
+            id: string;
+            /** Agent Id */
+            agent_id: string;
+            /** Thread Id */
+            thread_id: string | null;
+            /** Status */
+            status: string;
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            } | null;
+            /** Error Message */
+            error_message: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** MarkedRead */
         MarkedRead: {
             /** Updated */
@@ -769,6 +1032,30 @@ export interface components {
          * @enum {string}
          */
         Permission: "documents:create" | "agents:run" | "documents:access_any" | "roles:manage";
+        /** ProposalOut */
+        ProposalOut: {
+            /** Run Id */
+            run_id: string;
+            /** Field Path */
+            field_path: string;
+            /** Before */
+            before?: unknown;
+            /** Output */
+            output: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+        };
+        /** ProposalReview */
+        ProposalReview: {
+            /** Accept */
+            accept?: {
+                [key: string]: unknown;
+            };
+            /** Reject */
+            reject?: string[];
+        };
         /**
          * RatingIn
          * @description A thumbs up (true) or down (false) on something the agent wrote, with optional reasons.
@@ -829,6 +1116,41 @@ export interface components {
          * @enum {string}
          */
         RunStatus: "queued" | "accepted" | "running" | "succeeded" | "failed";
+        /** SessionCreate */
+        SessionCreate: {
+            /** Agent Id */
+            agent_id: string;
+            /**
+             * Title
+             * @default New conversation
+             */
+            title: string;
+        };
+        /** SessionOut */
+        SessionOut: {
+            /** Id */
+            id: string;
+            /** Agent Id */
+            agent_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** StartInteraction */
+        StartInteraction: {
+            /** Agent Id */
+            agent_id: string;
+            /** Input */
+            input: {
+                [key: string]: unknown;
+            };
+            /** Session Id */
+            session_id?: string | null;
+        };
         /** StepOut */
         StepOut: {
             /** Name */
@@ -956,6 +1278,197 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    list_notifications_api_notifications_get: {
+        parameters: {
+            query?: {
+                unread_only?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_read_api_notifications__notification_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_all_read_api_notifications_read_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkedRead"];
+                };
+            };
+        };
+    };
+    list_roles_api_admin_roles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleInfo"][];
+                };
+            };
+        };
+    };
+    list_role_assignments_api_admin_role_assignments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleAssignmentOut"][];
+                };
+            };
+        };
+    };
+    grant_role_api_admin_role_assignments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleGrantIn"];
+            };
+        };
+        responses: {
+            /** @description The user already had this role */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleAssignmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_role_api_admin_role_assignments__email___role__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                email: string;
+                role: components["schemas"]["Role"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1583,55 +2096,25 @@ export interface operations {
             };
         };
     };
-    list_notifications_api_notifications_get: {
-        parameters: {
-            query?: {
-                unread_only?: boolean;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationList"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mark_read_api_notifications__notification_id__read_post: {
+    proposals_api_documents__document_id__proposals_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                notification_id: number;
+                document_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"][];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -1644,7 +2127,45 @@ export interface operations {
             };
         };
     };
-    mark_all_read_api_notifications_read_all_post: {
+    review_proposals_api_documents__document_id__proposals__run_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalReview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    examples_api_examples_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1659,12 +2180,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MarkedRead"];
+                    "application/json": string[];
                 };
             };
         };
     };
-    list_roles_api_admin_roles_get: {
+    agents_api_agents_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1679,14 +2200,18 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoleInfo"][];
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };
     };
-    list_role_assignments_api_admin_role_assignments_get: {
+    sessions_api_sessions_get: {
         parameters: {
-            query?: never;
+            query: {
+                agent_id: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1699,12 +2224,21 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoleAssignmentOut"][];
+                    "application/json": components["schemas"]["SessionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
     };
-    grant_role_api_admin_role_assignments_post: {
+    create_session_api_sessions_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1713,24 +2247,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RoleGrantIn"];
+                "application/json": components["schemas"]["SessionCreate"];
             };
         };
         responses: {
-            /** @description The user already had this role */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Successful Response */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoleAssignmentOut"];
+                    "application/json": components["schemas"]["SessionOut"];
                 };
             };
             /** @description Validation Error */
@@ -1744,24 +2271,368 @@ export interface operations {
             };
         };
     };
-    revoke_role_api_admin_role_assignments__email___role__delete: {
+    messages_api_sessions__session_id__messages_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                email: string;
-                role: components["schemas"]["Role"];
+                session_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MessageOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    runs_api_runs_get: {
+        parameters: {
+            query: {
+                agent_id: string;
+                session_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_run_api_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartInteraction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InteractionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    events_api_runs__run_id__events_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_state_api_runs__run_id__review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_api_runs__run_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_api_runs__run_id__feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RatingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tool_outcomes_api_runs__run_id__tools_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tool_result_api_runs__run_id__tools__call_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_tool_api_runs__run_id__tools__call_id__claim_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {

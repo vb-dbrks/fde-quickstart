@@ -26,35 +26,23 @@ Off Databricks there is no sign-in proxy, so every request runs as `DEV_USER_EMA
 admin with `APP_ADMIN_EMAILS` in `.env`; otherwise it is only a viewer and can't create documents.
 
 Without `LLM_ENDPOINT` the agent is the fake one, in-process: runs take about a second per step and
-produce placeholder text. The Home page shows which runner serves each run kind.
+produce placeholder text. The home page is an example selector. Agent descriptors are available from `/api/agents`.
 
 To use a real model locally, set `DATABRICKS_CONFIG_PROFILE` (or `make dev PROFILE=<profile>`) and
 `LLM_ENDPOINT` to a Model Serving endpoint in that workspace.
 
-## Try the flow
+## Choose and adapt an example
 
-1. **Documents → New brief**. Enter a title and a goal; you become the owner.
-2. Create a second brief, then open the first and tick the second under **Sources**.
-3. **Generate**. The steps tick off as the run progresses; the agent fields fill in with an
-   **Agent** badge. **Why?** shows the confidence, the reasoning and the cited sources.
-4. On a field, the sparkle button asks the agent for a revision. **Accept** writes it; **Dismiss**
-   drops it.
-5. **Assistant** tab: ask a question. The conversation is stored in Lakebase and private to you.
-6. **History** tab: versions (one per generation) and the audit trail.
-7. **Share** gives other people view, edit or owner access.
+The home page explains three patterns. Chat and Generation work without creating a document.
+Document generation now produces proposals: accept selected fields or all remaining fields explicitly.
 
-## Checks
+1. Choose examples with `ENABLED_EXAMPLES=chat,generation,documents` (use the same setting for a split runtime).
+2. Replace the example input/output schemas and prompts.
+3. Register agent capabilities and application callbacks.
+4. Customize pages with shared chat, progress, structured-result and review primitives.
+5. Deploy with a named Databricks profile.
 
-```bash
-make lint      # ruff, mypy (strict), ESLint, Prettier, tsc
-make test      # pytest against real Postgres, and Vitest
-make contract  # the contract, runtime and boundary tests only
-make eval DEV=1  # the eval harness, offline with the fake agent
-make docs      # this site on :3000
-```
-
-After changing API schemas or routes, run `make api-types` to regenerate
-`frontend/src/api/schema.d.ts`; CI fails if it is stale.
+Use [the extension recipes](agentic-applications.md) for each step.
 
 ## Settings
 
@@ -63,6 +51,7 @@ runtime has its own in `backend/agents/config.py`. The ones you are most likely 
 
 | Variable | Default | Effect |
 | --- | --- | --- |
+| `ENABLED_EXAMPLES` | `chat,generation,documents` | Independently enabled example registrations and routes. |
 | `APP_ADMIN_EMAILS` | (none) | Comma-separated emails that are always admins. |
 | `DEV_USER_EMAIL` | `dev.user@example.com` | Who you are off-platform. |
 | `LLM_ENDPOINT` | (none) | Model Serving endpoint; when set, runners default to `real`. |

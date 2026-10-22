@@ -1,11 +1,10 @@
+import { examples, ExampleRoute } from "@/examples/registry";
 import type { RouteObject } from "react-router";
 
 import { AppShell } from "@/app/AppShell";
 import { RouteError } from "@/app/RouteError";
 import { RequirePermission } from "@/components/RequirePermission";
 import { AdminRolesPage } from "@/pages/AdminRolesPage";
-import { DocumentPage } from "@/pages/DocumentPage";
-import { DocumentsPage } from "@/pages/DocumentsPage";
 import { HomePage } from "@/pages/HomePage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 
@@ -17,8 +16,12 @@ export const routes: RouteObject[] = [
     errorElement: <RouteError />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: "documents", element: <DocumentsPage /> },
-      { path: "documents/:documentId", element: <DocumentPage /> },
+      ...examples.flatMap((example) =>
+        example.routes.map((route) => ({
+          ...route,
+          element: <ExampleRoute id={example.id}>{route.element}</ExampleRoute>,
+        })),
+      ),
       {
         path: "admin/roles",
         element: (

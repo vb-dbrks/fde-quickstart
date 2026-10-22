@@ -37,3 +37,20 @@ def test_package_imports_stay_inside_its_boundary(package: str) -> None:
         if not name.startswith(allowed)
     ]
     assert violations == []
+
+
+def test_generic_lifecycle_and_ui_do_not_import_example_domains() -> None:
+    imports = backend_imports(BACKEND / "services" / "interactions.py")
+    assert not any(
+        name.startswith(
+            (
+                "backend.examples",
+                "backend.contracts.field_catalog",
+                "backend.contracts.agent_contract_v1",
+            )
+        )
+        for name in imports
+    )
+    for source in (BACKEND.parent / "frontend" / "src" / "agent").glob("*.ts*"):
+        assert "@/examples/" not in source.read_text(), source
+        assert "@/components/documents/" not in source.read_text(), source

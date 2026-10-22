@@ -8,6 +8,7 @@ from backend.auth.access import require_document
 from backend.auth.deps import CurrentPrincipal
 from backend.domain.enums import Access, RunStatus
 from backend.domain.errors import ConflictError
+from backend.domain.models import FieldProposal
 from backend.domain.schemas import RatingIn, RatingOut
 from backend.services import agent_runs, feedback
 
@@ -70,10 +71,16 @@ async def dismiss_suggestion(
     run_id: str, principal: CurrentPrincipal, db: SessionDep, deliver_feedback: DeliverFeedback
 ) -> None:
     """Dismiss an enhance_field suggestion: the agent's revision was not wanted."""
-    run, _ = await agent_runs.get_run_for(db, principal, run_id)
+    run, document = await agent_runs.get_run_for(db, principal, run_id)
     field_path = ((run.request_payload or {}).get("enhance_context") or {}).get("field_path")
     if run.run_kind != "enhance_field" or run.status != RunStatus.SUCCEEDED or not field_path:
         raise ConflictError("Only a finished suggestion can be dismissed")
+    if run.review_required:
+        await require_document(db, principal, document.id, Access.EDIT, for_update=True)
+        proposal = await db.get(FieldProposal, (run.id, field_path), with_for_update=True)
+        if proposal is None or proposal.status == "accepted":
+            raise ConflictError("This proposal cannot be rejected")
+        proposal.status = "rejected"
     await feedback.record_verdict(db, principal, run, field_path, accepted=False)
     await db.commit()
     deliver_feedback()

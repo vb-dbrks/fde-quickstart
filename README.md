@@ -1,78 +1,81 @@
 # {{project_title}}
 
-A starter harness for Databricks Apps projects: a web app where people work on records and an AI
-agent drafts, edits and answers questions about them. Everything is wired end to end - sign-in,
-permissions, a Lakebase database, the agent, evals, deploys to dev/test/prod and CI/CD - so a
-project starts from a working app and changes the parts that are specific to it, by hand or with an
-AI coding assistant.
+A general-purpose starting template for FDE agentic applications on Databricks Apps. Choose a
+working example, replace its schemas and prompts, and customize its UI. Shared infrastructure
+provides authentication, asynchronous execution, AG-UI interactions, Lakebase persistence,
+MLflow tracing and feedback, and deployment to dev/test/prod.
 
-Out of the box it runs a small sample: **briefs**. A user writes a title and a goal, the agent drafts
-the summary, key points, risks and next steps (citing other documents the user picks), and the user
-reviews, edits, asks for revisions and chats about it. Swap "brief" for your project's records.
+| Example | What it demonstrates |
+| --- | --- |
+| **Chat** | Streaming conversations, persisted history, optional context and answer feedback; no documents required. |
+| **Generation** | A topic/audience/constraints form, progressive structured output, editing and explicit acceptance or rejection. |
+| **Documents** | Brief records, cited drafts, before/after review, atomic acceptance with stale-edit protection, and `focus_field` frontend actions. |
 
-## Is it a fit?
-
-**Good fit:** an internal tool where users create and review records with an agent's help -
-drafting, extraction, enrichment, Q&A over the record, human-in-the-loop approval. You want
-provenance (what the agent wrote, why, from which sources), versions and an audit trail.
-
-**Use something else for:** a dashboard over tables (AI/BI dashboards), a batch pipeline (Lakeflow
-jobs), a chatbot over a document corpus with no records to edit (Agent Bricks).
+Each example can be disabled independently with `ENABLED_EXAMPLES=chat,generation,documents`.
+Chat and generation do not load the document field catalog. There is no plugin service or package
+publishing workflow: the registrations and callbacks are ordinary application code in this repo.
 
 ## What you get
 
-| | |
+| Layer | Supplied integration |
 | --- | --- |
-| App | FastAPI + React 19 (Vite, Tailwind 4, shadcn/ui, TanStack Query) in one Databricks App; API types generated for the UI |
-| Data | Lakebase Postgres per target, SQLAlchemy + Alembic migrations applied at startup; local dev and tests on real Postgres with no Docker |
-| Agent | LangChain on a Databricks Model Serving endpoint, behind a versioned submit/poll contract; a fake agent for building and testing without a model |
-| Access | Databricks Apps sign-in; roles (viewer, editor, admin) plus per-document sharing |
-| Quality | Strict typing and linting, ~130 Python and ~20 UI tests, MLflow evals and tracing |
-| Ship | Declarative Automation Bundles (dev/test/prod), GitHub Actions and GitLab CI with keyless deploys |
-| Guidance | `AGENTS.md` for AI coding assistants; a docs site with guides and design decisions (`make docs`) |
+| UI | React 19, shadcn/ui, TanStack Query for persisted data, official AG-UI client for active interactions |
+| API | FastAPI, generated TypeScript types, permission checks and idempotent submission |
+| Data | Lakebase Postgres, SQLAlchemy, Alembic; local development and tests use real Postgres without Docker |
+| Runtime | Fake and real Databricks runners, validated input/results, streamed provisional state, MLflow tracing |
+| Recovery | Ordered durable events, SSE heartbeats, cursor polling fallback, background collection after browser disconnect |
+| Deployment | Databricks Apps, Declarative Automation Bundles and GitHub/GitLab CI |
 
-## Run it in 5 minutes
+## Run it locally
 
-You need [uv](https://docs.astral.sh/uv/), Node.js 22.22+, and `make`.
+You need [uv](https://docs.astral.sh/uv/), Node.js 22.22+ and `make`.
 
 ```bash
-make setup                  # Python and Node dependencies
-cp .env.example .env        # then put your email in DEV_USER_EMAIL and APP_ADMIN_EMAILS
-make dev                    # local Postgres, the API on :8000, the UI on http://localhost:5173
+make setup
+cp .env.example .env        # set DEV_USER_EMAIL and APP_ADMIN_EMAILS
+make dev                   # API :8000, React http://localhost:5173, local Postgres
 ```
 
-No Databricks workspace is needed: locally you are signed in as `DEV_USER_EMAIL`, and the agent is
-the fake one. Try it: **Documents → New brief**, create two, tick one as a source in the other,
-**Generate**, open **Why?** on a field, use the sparkle button to ask for a revision, chat in the
-**Assistant** tab, and look at **History**.
+Open the example selector. Try **Chat** and revisit the conversation; try **Generation** and edit
+before accepting; try **Documents → New brief → Generate** and review the proposed fields. New
+agent drafts do not change accepted data until you accept them. The fake runner needs no credentials.
 
-To use a real model, add `DATABRICKS_CONFIG_PROFILE` and `LLM_ENDPOINT` (a serving endpoint in that
-workspace) to `.env`.
+Set `DATABRICKS_CONFIG_PROFILE` and `LLM_ENDPOINT` in `.env` to use a real model. Per-agent overrides
+are supported, for example `AGENT_RUNNER_OVERRIDES=chat=real,generation=fake`.
 
 ## Make it yours
 
-1. **Create your repository** from this template (GitHub: *Use this template*; GitLab: import it).
-   Keep one CI system: delete `.gitlab-ci.yml` or `.github/`.
-2. **Fill in the placeholders** - names, admins, workspace hosts, model endpoint:
+1. **Choose an example.** Copy this template, keep the relevant examples with `ENABLED_EXAMPLES`,
+   and choose one CI system. Remove the unused registrations when you want to delete their code.
+2. **Replace schemas and prompts.** Start with `backend/contracts/examples.py` and
+   `backend/agents/example_registry.py`. Only document applications need `contracts/field-catalog.yaml`.
+3. **Register capabilities.** Add an `AgentDefinition` for runtime execution and an
+   `AgentApplication` for application authorization, context and result persistence. Core run kinds,
+   transport and lifecycle code do not change.
+4. **Customize the UI.** Use `frontend/src/agent/` primitives and register your page in
+   `frontend/src/examples/registry.tsx`. Add domain tables only when your application needs them.
+5. **Deploy.** Run `make init NAME=my-app ADMINS=you@example.com DEV_HOST=<workspace-url>
+   LLM_ENDPOINT=<endpoint>`, sign in with a named Databricks CLI profile, then
+   `make deploy TARGET=dev PROFILE=<profile>`. An admin grants roles under **Users & roles**.
 
-   ```bash
-   make init NAME=claims-portal ADMINS=you@example.com \
-     DEV_HOST=https://adb-1111.1.azuredatabricks.net LLM_ENDPOINT=databricks-claude-sonnet-5-5
-   ```
+See [the extension recipes](docs/content/guides/agentic-applications.md) for an agent, frontend tool,
+result renderer, persistence callback and example removal. See [execution v2](contracts/execution-v2.md)
+for the protocol. The existing [v1 document contract](contracts/agent-api-contract.md) remains supported.
 
-   `python3 scripts/init_project.py --check` lists anything still unset (test and prod hosts can
-   come later).
-3. **Model your records** in `contracts/field-catalog.yaml`: document types, their fields, and which
-   fields the agent writes. The forms, the API checks and both agents follow the catalog.
-4. **Teach the agent your domain**: the prompts in `backend/agents/prompts/`, and rows in
-   `evals/dataset.jsonl` that show what good output looks like. Need more than drafting, revising and
-   chatting? Add a run kind (`docs/content/guides/adding-a-run-kind.md`).
-5. **Shape the UI**: pages in `frontend/src/pages/`, the workspace parts in
-   `frontend/src/components/documents/`.
-6. **Deploy**: sign in to the workspace with a named CLI profile
-   (`databricks auth login --host <host> --profile <name>`), then
-   `make deploy TARGET=dev PROFILE=<name>`. An admin grants roles under **Users & roles**.
-7. **Turn on CI/CD** (`docs/content/guides/deploy-and-ci.md`).
+### Recovery and migration
+
+SSE and JSON polling read the same event journal. Reconnecting attaches to an existing run and never
+submits inference. The cursor envelope is an **application transport extension**, not standard AG-UI
+SSE resumption. Events recover viewing state; an agent-process restart can still produce
+`AGENT_RUN_LOST`. Persistent interrupt/resume workflows and arbitrary generated UI are future extensions.
+
+The migration preserves run, thread, message and feedback identifiers and moves document links to
+association tables. Completed history stays unchanged; outstanding pre-migration document runs retain
+their old materialisation policy. New document generations store proposals. Back up existing data
+before upgrading; rollback across this migration requires restoring that backup.
+
+See [verification results](docs/content/guides/ag-ui-verification.md) for offline checks, HTTP smoke
+coverage and the separate live Databricks test status.
 
 ## Working with an AI coding assistant
 

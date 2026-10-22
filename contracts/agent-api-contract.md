@@ -400,3 +400,17 @@ Errors: `400 VALIDATION_ERROR`; `502 FEEDBACK_FAILED` (retryable) when the trace
 | Version | Date | Change |
 | --- | --- | --- |
 | v1 | 2026-10-20 | Initial contract: generate, enhance_field, assistant_turn. |
+
+
+## Optional interaction extensions
+
+The v1 envelope now optionally includes `events` (default `[]`), a cumulative list of official AG-UI
+preview events. `AgentOutput` optionally includes `ui_action` (default null), currently
+`{"name":"focus_field","field_path":"brief.summary"}`. The document adapter checks the field
+catalog before publishing the registered frontend tool. Old runtimes can omit both extensions.
+
+The v1 three-operation request and response shapes remain supported. Generic agents use the separate
+[execution v2 contract](execution-v2.md); do not expand v1 document context for unrelated applications.
+New app-side document generation stores review proposals; historical and outstanding migrated runs
+retain their recorded legacy materialisation policy. This is application behaviour, not a change to
+the v1 agent's output contract.

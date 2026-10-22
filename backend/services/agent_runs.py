@@ -100,6 +100,7 @@ async def _lock_run(db: AsyncSession, run_id: str) -> AgentRun | None:
 
 
 def _apply_status(run: AgentRun, status: AgentRunStatus) -> None:
+    run.response_payload = status.model_dump(mode="json", exclude_none=True)
     run.status = status.status
     run.step_history = [step.model_dump(mode="json") for step in status.step_history]
     run.mlflow_trace_id = status.trace_id or run.mlflow_trace_id
@@ -154,7 +155,10 @@ async def start_run(
         raise ForbiddenError(f"Missing permission: {Permission.AGENTS_RUN}")
     _validate(options, document, access, deps.catalog)
 
-    fields = documents.field_values(await documents.field_rows(db, document.id))
+    field_rows = await documents.field_rows(db, document.id)
+    fields = documents.field_values(field_rows)
+    # Revisions must describe the same snapshot the agent sees, before loading other context.
+    revisions = {path: row.revision for path, row in field_rows.items()}
     source_ids = [i for i in options.source_document_ids if i != document.id][:MAX_SOURCES]
     sources = [
         render_source(
@@ -200,7 +204,12 @@ async def start_run(
         triggered_by=principal.email,
         request_payload=request.model_dump(mode="json", exclude_none=True),
         step_history=[],
+        review_required=options.run_kind in ("generate", "enhance_field"),
     )
+    run.request_payload = {
+        **run.request_payload,
+        "_field_revisions": revisions,
+    }
     db.add(run)
     if thread_id is not None:
         db.add(
@@ -315,7 +324,7 @@ async def refresh_run(db: AsyncSession, deps: RunDeps, run_id: str) -> AgentRun 
             Notice(
                 recipient=run.triggered_by,
                 kind="agent_run_succeeded",
-                title=f"Generate finished for “{document.title}”",
+                title=f"Draft ready for “{document.title}”",
                 body="Review the drafted fields.",
                 link=f"/documents/{document.id}",
             ),
@@ -329,7 +338,11 @@ async def _materialise(
 ) -> None:
     assert status.output is not None
     try:
-        if run.run_kind == "generate":
+        if run.review_required and run.run_kind in ("generate", "enhance_field"):
+            from backend.examples.proposals import create_proposals
+
+            await create_proposals(db, run, status.output)
+        elif run.run_kind == "generate":
             await materialise_generate(
                 db,
                 run=run,

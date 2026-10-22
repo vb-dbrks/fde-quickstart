@@ -44,7 +44,7 @@ JSON responses are stored, so a failed request can be retried.
 
 `backend/agents/` is the agent. It serves the contract (`POST /agent/run`, `GET /agent/run/{id}`,
 `GET /contract`, `GET /healthz`), runs work on a bounded thread pool, records step history, and checks
-every output against the contract and the field catalog before reporting `succeeded`.
+every output against its registered result schema (document operations also check the field catalog) before reporting `succeeded`.
 
 It may import only `backend.agents` and `backend.contracts`: no database, no services, no app settings.
 `tests/agents/test_boundary.py` enforces this by parsing every module's imports, and also keeps
@@ -66,3 +66,17 @@ same JSON in both transports:
 The client maps failures to typed errors: `AgentTimeoutError`, `AgentRunNotFound`, `AgentRemoteError`
 (an error envelope, with its code and whether it is retryable) and `AgentContractError` (a response
 that does not match the models). Requests carry `User-Agent: quickstart-app agent-contract/v1`.
+
+
+## Generic interaction boundary
+
+`backend/services/interactions.py` and `backend/agents/interaction.py` are the generic application
+lifecycle and runtime. They import no example modules. `backend/examples/registry.py` and
+`backend/agents/example_registry.py` are explicit composition roots for app callbacks and runners.
+The existing document service remains a compatibility adapter for v1; new generic operations use
+`backend/contracts/execution.py`. Domain associations and proposals belong to the document example.
+
+`frontend/src/agent/` contains the AG-UI transport adapter, provider, data hooks and composable UI.
+It must not import document APIs or schemas. `frontend/src/examples/registry.tsx` owns example routes
+and navigation. TanStack Query caches persisted data; AG-UI manages active state/messages/tools.
+See [ADR 0011](adr/0011-generic-ag-ui-interactions.md).

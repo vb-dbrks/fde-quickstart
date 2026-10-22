@@ -42,7 +42,8 @@ export function mockApi(routes: Record<string, Handler>) {
     const { pathname } = new URL(request.url);
     const route =
       routes[`${request.method} ${pathname}`] ??
-      (request.method === "GET" ? routes[pathname] : undefined);
+      (request.method === "GET" ? routes[pathname] : undefined) ??
+      (pathname === "/api/examples" ? ["chat", "generation", "documents"] : undefined);
     const handler = typeof route === "function" ? await route(request) : route;
     if (handler === undefined) return Response.json({ detail: "Not Found" }, { status: 404 });
     return handler instanceof Response ? handler.clone() : Response.json(handler);

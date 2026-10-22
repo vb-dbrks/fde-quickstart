@@ -45,7 +45,20 @@ async def poll(client: httpx.AsyncClient, run_id: str, email: str = EDITOR) -> d
     return run
 
 
-async def test_generate_materialises_fields_with_provenance(
+async def accept_draft(client: httpx.AsyncClient, document_id: str, run_id: str) -> None:
+    proposals = (
+        await client.get(f"/api/documents/{document_id}/proposals", headers=as_user(EDITOR))
+    ).json()
+    values = {p["field_path"]: p["output"]["value"] for p in proposals if p["run_id"] == run_id}
+    accepted = await client.post(
+        f"/api/documents/{document_id}/proposals/{run_id}/review",
+        json={"accept": values},
+        headers=as_user(EDITOR),
+    )
+    assert accepted.status_code == 200, accepted.text
+
+
+async def test_generate_acceptance_materialises_fields_with_provenance(
     client: httpx.AsyncClient, editor: str, sessions: async_sessionmaker[AsyncSession]
 ) -> None:
     source = await create_brief(
@@ -62,6 +75,7 @@ async def test_generate_materialises_fields_with_provenance(
     assert run["status"] == "succeeded"
     assert [s["status"] for s in run["step_history"]] == ["completed"] * 3
 
+    await accept_draft(client, document["id"], run["id"])
     fresh = (await client.get(f"/api/documents/{document['id']}", headers=as_user(editor))).json()
     fields = {f["field_path"]: f for f in fresh["fields"]}
     summary = fields["brief.summary"]
@@ -81,7 +95,7 @@ async def test_generate_materialises_fields_with_provenance(
     audit = (
         await client.get(f"/api/documents/{document['id']}/audit", headers=as_user(editor))
     ).json()
-    assert sum(a["action"] == "generate" for a in audit) == 4
+    assert sum(a["action"] == "accept_suggestion" for a in audit) == 4
 
     # The stored request carries the full context the agent saw (ADR 0004).
     async with sessions() as db:
@@ -110,13 +124,17 @@ async def test_regenerating_a_scope_rewrites_only_those_fields(
     client: httpx.AsyncClient, editor: str
 ) -> None:
     document = await create_brief(client)
-    await poll(client, (await start(client, document["id"])).json()["id"])
+    first = await poll(client, (await start(client, document["id"])).json()["id"])
+    await accept_draft(client, document["id"], first["id"])
     second = await start(client, document["id"], scope=["brief.risks"])
     await poll(client, second.json()["id"])
+    await accept_draft(client, document["id"], second.json()["id"])
     audit = (
         await client.get(f"/api/documents/{document['id']}/audit", headers=as_user(editor))
     ).json()
-    assert [a["field_path"] for a in audit if a["action"] == "regenerate"] == ["brief.risks"]
+    assert [a["field_path"] for a in audit if a["agent_run_id"] == second.json()["id"]] == [
+        "brief.risks"
+    ]
 
 
 async def test_viewers_cannot_run_agents(client: httpx.AsyncClient, editor: str) -> None:

@@ -16,6 +16,12 @@ STATIC_DIR = Path(__file__).parent / "static"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    enabled_examples: str = "chat,generation,documents"
+
+    @property
+    def examples(self) -> frozenset[str]:
+        return frozenset(x.strip() for x in self.enabled_examples.split(",") if x.strip())
+
     app_title: str = "Quickstart App"
 
     # Local development and tests: a SQLAlchemy URL, e.g. the pgserver instance started by `make dev`.

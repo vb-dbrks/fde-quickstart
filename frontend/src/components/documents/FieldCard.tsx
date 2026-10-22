@@ -47,7 +47,13 @@ export function FieldCard({
   const canEnhance = canEdit && canRunAgent && field.agent_generates;
 
   return (
-    <Card className="gap-3" role="group" aria-labelledby={`field-${field.field_path}`}>
+    <Card
+      id={`field-${field.field_path}`}
+      tabIndex={-1}
+      className="gap-3"
+      role="group"
+      aria-labelledby={`field-${field.field_path}`}
+    >
       <CardHeader>
         <CardTitle id={`field-${field.field_path}`} className="flex flex-wrap items-center gap-2">
           {field.label}
